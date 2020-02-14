@@ -1,6 +1,6 @@
 Abstract:
 	Often computing involves IO directly at some point. This is in essence a given unless the processor is generating its own values to compute on. Algorithms for processing data are good to know, and their implementation is useful, however in nearly any case where you need to compute on some data you will also need to read it from or write it to somewhere.
-
+ 
 	
 	
 Introduction:
