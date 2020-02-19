@@ -3,23 +3,29 @@
 #include <fcntl.h>
 #include <string.h>
 
-typedef struct nodes{
+typedef struct cnode{
+    char* val;
+    struct cnode* next;
+}cnode;
+
+typedef struct node{
     char* val;
     struct node* next;
 }node;
 
-node* initNode()
+cnode* initCNode()
 {
-    node* temp = malloc(sizeof(node));
+    cnode* temp = malloc(sizeof(cnode));
+    temp->val = malloc(sizeof(char));
     temp->next = NULL;
-    temp->val = malloc(256);
+    return temp;
 }
 
-node* insert(node* head,node* temp)
+cnode* insertChar(cnode* head, cnode* temp)
 {
-    node* prev = NULL;
-    node* curr = head;
-    while(curr!=NULL)
+    cnode* curr = head;
+    cnode* prev = NULL;
+    while(curr !=NULL)
     {
         prev = curr;
         curr = curr->next;
@@ -31,43 +37,34 @@ node* insert(node* head,node* temp)
     return head;
 }
 
-char* remSpace(char* word)
-{
-    char* temp = malloc(100);
-    int i;
-    int k = 0;
-    for(i = 0;i<strlen(word)+1;i++)
-    {
-        if(word[i] > '!')
-        {
-            temp[k] = word[i];
-            k++;
-        }
-    }
-    return temp;
-}
-
 int main(int argc,char** argv)
 {
-    char* file = argv[2]; 
+    char* file = argv[2];
     int fd = open(file,O_RDONLY);
-    char* line = malloc(257);
-    read(fd,line,256);
-    char* word = strtok(line,",");
-    node* head = NULL;
-    node* temp;
-    while(word)
+    char* c = malloc(sizeof(char));
+    cnode* head = NULL;
+    cnode* temp;
+    while(read(fd,c,1))
     {
-        word = remSpace(word);
-        temp = initNode();
-        temp->val = word;
-        head = insert(head,temp);
-        word = strtok(NULL,",");
-    }
-    while(head!=NULL)
-    {
-        printf("%s\n",head->val);
-        head = head->next;
+        if(*c != ',')
+        {
+            if(*c != ' ' && *c != '\n' && *c != '\t')
+            {
+                temp = initCNode();
+                memcpy(temp->val,c,1);
+                head = insertChar(head,temp);
+            }
+        }
+        else
+        {
+            while(head!=NULL)
+            {
+                printf("%c",*head->val);
+                head=head->next;
+            }
+            printf("\n");
+            head = NULL;
+        }
     }
     return 0;
 }
