@@ -13,6 +13,8 @@ typedef struct token{
     struct token* next;
 }token;
 
+int length;
+
 node* initNode()
 {
     node* temp = malloc(sizeof(node));
@@ -46,22 +48,18 @@ token* insertToken(token* head, token* temp)
 
 token* addToList(token* head,node* word)
 {
-    node* counter = word;
-    int count=0;
-    while(counter!=NULL)
-    {
-        count++;
-        counter= counter->next;
-    }
-    char* w = malloc(sizeof(char) * count);
+    char* w = malloc(sizeof(char) * length);
     int i;
-    for(i = 0;i<count;i++)
+    for(i = 0;i<length;i++)
     {
         w[i] = *word->val;
         word= word->next;
     }
     token* temp = initToken();
-    temp->val = w;
+    if(length == 0)
+        temp->val = "";
+    else
+        temp->val = w;
     head = insertToken(head,temp);
 }
 
@@ -89,12 +87,14 @@ int main(int argc,char** argv)
     node* head = NULL;
     node* temp;
     token* list = NULL;
+    length = 0;
     while(read(fd,c,1))
     {
         if(*c != ',')
         {
             if(*c != ' ' && *c != '\n' && *c != '\t')
             {
+                length+=1;
                 temp = initNode();
                 memcpy(temp->val,c,1);
                 head = insertChar(head,temp);
@@ -103,6 +103,7 @@ int main(int argc,char** argv)
         else
         {
             list = addToList(list,head);
+            length=0;
             head = NULL;
         }
     }
