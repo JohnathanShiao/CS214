@@ -78,7 +78,10 @@ node* insertChar(node* head, node* temp)
         prev->next = temp;
     return head;
 }
-int comparator_int(int num1, int num2){
+int comparator_int(void* n1, void* n2)
+{
+    int num1 = *(int*) n1;
+    int num2 = *(int*) n2;
     if(num1 > num2)
         return 1;
     else if(num1 < num2)
@@ -86,27 +89,34 @@ int comparator_int(int num1, int num2){
     return 0; //if num1 = num2
 }
 
-int comparator_string(char* str1, char* str2){
+int comparator_string(void* s1, void* s2)
+{
+    char* str1 = (char*) s1;
+    char* str2 = (char*) s2;
     int len1 = strlen(str1);
     int len2 = strlen(str2);
     int count = 0;
     int flag = -1;
-    if(len1 > len2){
+    if(len1 > len2)
+    {
         count = len2;
         flag = 0;
-    }else if(len1 < len2){
+    }else if(len1 < len2)
+    {
         count = len1;
         flag = 1;
     }else
         count = len1;
     int i;
-    for(i = 0; i < count; i++){
+    for(i = 0; i < count; i++)
+    {
         if(str1[i] < str2[i])
             return -1;
         else if(str1[i] > str2[i])
             return 1;
     }
-    if(flag != -1){
+    if(flag != -1)
+    {
         if(flag == 0)
             return 1;
         else
@@ -143,12 +153,13 @@ int main(int argc,char** argv)
             head = NULL;
         }
     }
-    list = addToList(list,head);
-    token* it = list;
-    while(it!=NULL)
-    {
-        printf("%s\n",it->val);
-        it=it->next;
-    }
+    if(length >0)
+        list = addToList(list,head);
+    // token* it = list;
+    // while(it!=NULL)
+    // {
+    //     printf("%s\n",it->val);
+    //     it=it->next;
+    // }
     return 0;
 }
