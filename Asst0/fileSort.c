@@ -18,6 +18,17 @@ node* initNode()
     return temp;
 }
 
+void freeList(node* head)
+{
+    node* temp;
+    while(head!=NULL)
+    {
+        temp = head;
+        head = head->next;
+        free(temp);
+    }
+}
+
 node* insert(node* head, node* temp)
 {
     node* curr = head;
@@ -173,6 +184,7 @@ int main(int argc,char** argv)
         {
             list = addToList(list,head);
             length=0;
+            freeList(head);
             head = NULL;
         }
     }
