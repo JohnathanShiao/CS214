@@ -18,7 +18,7 @@ node* initNode()
     return temp;
 }
 
-node* insertToken(node* head, node* temp)
+node* insert(node* head, node* temp)
 {
     node* curr = head;
     node* prev = NULL;
@@ -48,7 +48,7 @@ node* addToList(node* head,node* word)
         temp->val = "";
     else
         temp->val = w;
-    head = insertToken(head,temp);
+    head = insert(head,temp);
 }
 
 int comparator_int(void* n1, void* n2)
@@ -120,14 +120,14 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
             temp = initNode();
             memcpy(temp,ptr,sizeof(node));
             temp->next = NULL;
-            lHead = insertToken(lHead,temp);
+            lHead = insert(lHead,temp);
         }
         else
         {
             temp = initNode();
             memcpy(temp,ptr,sizeof(node));
             temp->next = NULL;
-            rHead = insertToken(rHead,temp);
+            rHead = insert(rHead,temp);
         }
         ptr = ptr->next;
     }
@@ -166,7 +166,7 @@ int main(int argc,char** argv)
                 temp = initNode();
                 temp->val = malloc(sizeof(char));
                 memcpy(temp->val,c,1);
-                head = insertToken(head,temp);
+                head = insert(head,temp);
             }
         }
         else
