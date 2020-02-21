@@ -2,38 +2,26 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
+#include <ctype.h>
 
 typedef struct node{
     char* val;
     struct node* next;
 }node;
 
-typedef struct token{
-    char* val;
-    struct token* next;
-}token;
-
 int length;
 
 node* initNode()
 {
     node* temp = malloc(sizeof(node));
-    temp->val = malloc(sizeof(char));
     temp->next = NULL;
     return temp;
 }
 
-token* initToken()
+node* insertToken(node* head, node* temp)
 {
-    token* temp = malloc(sizeof(token));
-    temp->next = NULL;
-    return temp;
-}
-
-token* insertToken(token* head, token* temp)
-{
-    token* curr = head;
-    token* prev = NULL;
+    node* curr = head;
+    node* prev = NULL;
     while(curr != NULL)
     {
         prev = curr;
@@ -46,7 +34,7 @@ token* insertToken(token* head, token* temp)
     return head;
 }
 
-token* addToList(token* head,node* word)
+node* addToList(node* head,node* word)
 {
     char* w = malloc(sizeof(char) * length);
     int i;
@@ -55,7 +43,7 @@ token* addToList(token* head,node* word)
         w[i] = *word->val;
         word= word->next;
     }
-    token* temp = initToken();
+    node* temp = initNode();
     if(length == 0)
         temp->val = "";
     else
@@ -63,25 +51,10 @@ token* addToList(token* head,node* word)
     head = insertToken(head,temp);
 }
 
-node* insertChar(node* head, node* temp)
-{
-    node* curr = head;
-    node* prev = NULL;
-    while(curr !=NULL)
-    {
-        prev = curr;
-        curr = curr->next;
-    }
-    if(prev == NULL)
-        head = temp;
-    else
-        prev->next = temp;
-    return head;
-}
 int comparator_int(void* n1, void* n2)
 {
-    int num1 = *(int*) n1;
-    int num2 = *(int*) n2;
+    int num1 = atoi(n1);
+    int num2 = atoi(n2);
     if(num1 > num2)
         return 1;
     else if(num1 < num2)
@@ -105,7 +78,12 @@ int comparator_string(void* s1, void* s2)
     {
         count = len1;
         flag = 1;
-    }else
+    }
+    else if(len1 == 0)
+        return -1;
+    else if(len2 == 0)
+        return 1;
+    else
         count = len1;
     int i;
     for(i = 0; i < count; i++)
@@ -125,14 +103,58 @@ int comparator_string(void* s1, void* s2)
     return 0;
 }
 
+int quickSort(void* toSort, int(*comparator)(void*,void*))
+{
+    node* pivot = (node*)toSort;
+    if(pivot == NULL)
+        return 0;
+    node* ptr = pivot->next;
+    node* lHead;
+    node* rHead;
+    node* temp;
+    lHead = rHead = temp = NULL;
+    while(ptr!=NULL)
+    {
+        if(comparator(ptr->val,pivot->val) < 0)
+        {
+            temp = initNode();
+            memcpy(temp,ptr,sizeof(node));
+            temp->next = NULL;
+            lHead = insertToken(lHead,temp);
+        }
+        else
+        {
+            temp = initNode();
+            memcpy(temp,ptr,sizeof(node));
+            temp->next = NULL;
+            rHead = insertToken(rHead,temp);
+        }
+        ptr = ptr->next;
+    }
+    if(!quickSort(lHead,comparator))
+        printf("%s\n",pivot->val);
+    quickSort(rHead,comparator);
+}
+
 int main(int argc,char** argv)
 {
+    int sortType;
     char* file = argv[2];
+    char* sort = argv[1];
+    if(sort[1] = 'q')
+        sortType = 1;
+    else if(sort[1] = 'i')
+        sortType = 0;
+    else
+    {
+        printf("Fatal Error %s is not a valid flag",argv[1]);
+        return 0;
+    }
     int fd = open(file,O_RDONLY);
     char* c = malloc(sizeof(char));
-    node* head = NULL;
+    node* head = NULL;                  //linked list of chars to create a token
     node* temp;
-    token* list = NULL;
+    node* list = NULL;                  //linked list of tokens from file
     length = 0;
     while(read(fd,c,1))
     {
@@ -142,8 +164,9 @@ int main(int argc,char** argv)
             {
                 length+=1;
                 temp = initNode();
+                temp->val = malloc(sizeof(char));
                 memcpy(temp->val,c,1);
-                head = insertChar(head,temp);
+                head = insertToken(head,temp);
             }
         }
         else
@@ -155,11 +178,13 @@ int main(int argc,char** argv)
     }
     if(length >0)
         list = addToList(list,head);
-    // token* it = list;
-    // while(it!=NULL)
-    // {
-    //     printf("%s\n",it->val);
-    //     it=it->next;
-    // }
+    int cmpType = atoi(list->val);
+    if(sortType == 1)
+    {
+        if(cmpType != 0)
+            quickSort(list,comparator_int);
+        else
+            quickSort(list,comparator_string);
+    }
     return 0;
 }
