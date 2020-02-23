@@ -137,7 +137,8 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
 			{
 				temp->next = sorted;
 				sorted = temp;
-			}else
+			}
+            else
 			{
 				node* prev = NULL;
 				node* curr = sorted;
