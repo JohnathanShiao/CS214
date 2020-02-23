@@ -186,12 +186,16 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
             temp->next = NULL;
             rHead = insert(rHead,temp);
         }
+        node* prev = ptr;
         ptr = ptr->next;
+        free(prev);
     }
     if(!quickSort(lHead,comparator))
+    {
         printf("%s\n",pivot->val);
-    return quickSort(rHead,comparator);
-
+        free(pivot);
+    }
+    quickSort(rHead,comparator);
 }
 
 int main(int argc,char** argv)
@@ -237,6 +241,7 @@ int main(int argc,char** argv)
     }
     if(length > 0)
         list = addToList(list,head);
+    freeList(head);
     int cmpType = atoi(list->val);
     if(sortType == 1)
     {
