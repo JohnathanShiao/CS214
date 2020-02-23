@@ -205,5 +205,5 @@ int main(int argc,char** argv)
             quickSort(list,comparator_string);
     }
     close(fd);
-    return 0;
+    return 0; 
 }
