@@ -47,7 +47,7 @@ node* insert(node* head, node* temp)
 
 node* addToList(node* head,node* word)
 {
-    char* w = malloc(sizeof(char) * length);
+    char* w = calloc(length, sizeof(char));
     int i;
     for(i = 0;i<length;i++)
     {
@@ -226,7 +226,7 @@ int main(int argc,char** argv)
             {
                 length+=1;
                 temp = initNode();
-                temp->val = malloc(sizeof(char));
+                temp->val = calloc(1, sizeof(char));
                 memcpy(temp->val,c,1);
                 head = insert(head,temp);
             }
