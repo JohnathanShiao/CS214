@@ -60,6 +60,7 @@ node* addToList(node* head,node* word)
     else
         temp->val = w;
     head = insert(head,temp);
+    return head;
 }
 
 int comparator_int(void* n1, void* n2)
@@ -68,7 +69,7 @@ int comparator_int(void* n1, void* n2)
     int num2 = atoi(n2);
     if(num1 > num2)
         return 1;
-    else if(number1 < number2)
+    else if(num1 < num2)
         return -1;
     return 0; //if num1 = num2
 }
@@ -150,8 +151,15 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
 			}
 		}
 	}
-		//need to free and print
+	node* print = NULL;
+    for(print = sorted; print != NULL; print = print->next)
+    {
+        printf("%s\n", print->val);
+    }	
+    freeList(head);
+    freeList(sorted);
     return 1;
+}
 int quickSort(void* toSort, int(*comparator)(void*,void*))
 {
     node* pivot = (node*)toSort;
@@ -182,17 +190,18 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
     }
     if(!quickSort(lHead,comparator))
         printf("%s\n",pivot->val);
-    quickSort(rHead,comparator);
+    return quickSort(rHead,comparator);
+
 }
 
 int main(int argc,char** argv)
 {
     int sortType;
-    char* file = argv[2];
+    char* file = argv[2];   
     char* sort = argv[1];
-    if(sort[1] = 'q')
+    if(comparator_string(sort, "-q") == 0)
         sortType = 1;
-    else if(sort[1] = 'i')
+    else if(comparator_string(sort, "-i") == 0)
         sortType = 0;
     else
     {
@@ -205,7 +214,7 @@ int main(int argc,char** argv)
     node* temp;
     node* list = NULL;                  //linked list of tokens from file
     length = 0;
-    while(read(fd,c,1))
+    while(read(fd,c,1) > 0)
     {
         if(*c != ',')
         {
@@ -226,7 +235,7 @@ int main(int argc,char** argv)
             head = NULL;
         }
     }
-    if(length >0)
+    if(length > 0)
         list = addToList(list,head);
     int cmpType = atoi(list->val);
     if(sortType == 1)
@@ -235,6 +244,13 @@ int main(int argc,char** argv)
             quickSort(list,comparator_int);
         else
             quickSort(list,comparator_string);
+    }else
+    {
+        if(cmpType != 0)
+            insertionSort(list, comparator_int);
+        else    
+            insertionSort(list, comparator_string);
     }
+    close(fd);
     return 0;
 }
