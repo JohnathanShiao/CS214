@@ -161,6 +161,7 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
     freeList(sorted);
     return 1;
 }
+
 int quickSort(void* toSort, int(*comparator)(void*,void*))
 {
     node* pivot = (node*)toSort;
