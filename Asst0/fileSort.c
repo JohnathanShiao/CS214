@@ -80,11 +80,15 @@ node* insertChar(node* head, node* temp)
 }
 int comparator_int(void* n1, void* n2)
 {
-    int num1 = *(int*) n1;
-    int num2 = *(int*) n2;
-    if(num1 > num2)
+    //int num1 = *(int*) n1;
+    //int num2 = *(int*) n2;
+	char* num1 = (char*) n1;	/* THIS IS NEEDED FOR NEGATIVES */
+	char* num2 = (char*) n2;
+	int number1 = atoi(num1);
+	int number2 = atoi(num2);
+    if(number1 > number2)
         return 1;
-    else if(num1 < num2)
+    else if(number1 < number2)
         return -1;
     return 0; //if num1 = num2
 }
@@ -125,6 +129,46 @@ int comparator_string(void* s1, void* s2)
     return 0;
 }
 
+int insertionSort(void* toSort, int (*comparator)(void*, void*))
+{
+    node* head = (node*) toSort;
+    if(head == NULL)    //empty LL
+        return 0;
+
+	node* sorted = malloc(sizeof(node));
+	sorted->val = head->val;
+	sorted->next = NULL;
+	
+    if(head->next != NULL) //more than one node
+    { 
+		node* ptr = NULL;
+		for(ptr = head->next; ptr != NULL; ptr = ptr->next)
+		{
+			node* temp = malloc(sizeof(node));
+			temp->val = ptr->val;
+	
+			if(comparator(temp->val, sorted->val) == -1)
+			{
+				temp->next = sorted;
+				sorted = temp;
+			}else
+			{
+				node* prev = NULL;
+				node* curr = sorted;
+				while(curr != NULL && (comparator(curr->val, temp->val) != 1))
+				{
+					prev = curr;
+					curr = curr->next;
+				}
+				prev->next = temp;
+				temp->next = curr;
+			}
+		}
+	}
+		//need to free and print
+    return 1;
+}
+
 int main(int argc,char** argv)
 {
     char* file = argv[2];
@@ -161,5 +205,8 @@ int main(int argc,char** argv)
     //     printf("%s\n",it->val);
     //     it=it->next;
     // }
+
+    //int (*fn) (void*, void*) = comparator_int;
+    //int result = insertionSort(list, *fn);
     return 0;
 }
