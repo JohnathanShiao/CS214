@@ -25,6 +25,7 @@ void freeList(node* head)
     {
         temp = head;
         head = head->next;
+        free(temp->val);
         free(temp);
     }
 }
@@ -195,6 +196,7 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
     if(!quickSort(lHead,comparator))
     {
         printf("%s\n",pivot->val);
+        free(pivot->val);
         free(pivot);
     }
     quickSort(rHead,comparator);
@@ -211,7 +213,7 @@ int main(int argc,char** argv)
         sortType = 0;
     else
     {
-        printf("Fatal Error %s is not a valid flag",argv[1]);
+        printf("Fatal Error: '%s' is not a valid flag\n",argv[1]);
         return 0;
     }
     int fd = open(file,O_RDONLY);
@@ -244,6 +246,7 @@ int main(int argc,char** argv)
     if(length > 0)
         list = addToList(list,head);
     freeList(head);
+    free(c);
     int cmpType = atoi(list->val);
     if(sortType == 1)
     {
