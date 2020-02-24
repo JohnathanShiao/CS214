@@ -118,7 +118,7 @@ int comparator_string(void* s1, void* s2)
 int insertionSort(void* toSort, int (*comparator)(void*, void*))
 {
     node* head = (node*) toSort;
-    if(head == NULL)    //empty LL
+    if(head == NULL) 
         return 0;
 
 	node* sorted = malloc(sizeof(node));
