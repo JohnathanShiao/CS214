@@ -201,6 +201,11 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
 
 int main(int argc,char** argv)
 {
+    if(argc < 3)
+    {
+        printf("Fatal Error: not enough arguments, expected two arguments but received %d\n", (argc - 1));
+        return 0;
+    }
     int sortType;
     char* file = argv[2];   
     char* sort = argv[1];
@@ -210,10 +215,16 @@ int main(int argc,char** argv)
         sortType = 0;
     else
     {
-        printf("Fatal Error %s is not a valid flag",argv[1]);
+        printf("Fatal Error: '%s' is not a valid flag\n",argv[1]);
         return 0;
     }
     int fd = open(file,O_RDONLY);
+    if(fd < 0)
+    {
+        printf("Fatal Error: '%s' does not exist in this directory\n", argv[2]);
+        close(fd);
+        return 0;
+    }
     char* c = malloc(sizeof(char));
     node* head = NULL;                  //linked list of chars to create a token
     node* temp;
@@ -243,6 +254,12 @@ int main(int argc,char** argv)
     if(length > 0)
         list = addToList(list,head);
     freeList(head);
+    if(list == NULL)
+    {
+        printf("Warning: file is empty\n");
+        close(fd);
+        return 0;
+    }
     int cmpType = atoi(list->val);
     if(sortType == 1)
     {
