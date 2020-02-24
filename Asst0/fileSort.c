@@ -121,11 +121,9 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
     node* head = (node*) toSort;
     if(head == NULL) 
         return 0;
-
 	node* sorted = malloc(sizeof(node));
 	sorted->val = head->val;
 	sorted->next = NULL;
-	
     if(head->next != NULL) //more than one node
     { 
 		node* ptr = NULL;
@@ -199,7 +197,7 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
         free(pivot->val);
         free(pivot);
     }
-    quickSort(rHead,comparator);
+    return quickSort(rHead,comparator);
 }
 
 int main(int argc,char** argv)
