@@ -25,6 +25,7 @@ void freeList(node* head)
     {
         temp = head;
         head = head->next;
+        free(temp->val);
         free(temp);
     }
 }
@@ -195,6 +196,7 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
     if(!quickSort(lHead,comparator))
     {
         printf("%s\n",pivot->val);
+        free(pivot->val);
         free(pivot);
     }
     quickSort(rHead,comparator);
@@ -261,6 +263,7 @@ int main(int argc,char** argv)
         close(fd);
         return 0;
     }
+    free(c);
     int cmpType = atoi(list->val);
     if(sortType == 1)
     {
