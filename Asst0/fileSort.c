@@ -68,9 +68,9 @@ int comparator_int(void* n1, void* n2)
 {
     int num1 = atoi(n1);
     int num2 = atoi(n2);
-    if(num1 > num2)
+    if(num1 > num2 || strlen(n2) == 0)
         return 1;
-    else if(num1 < num2)
+    else if(num1 < num2 || strlen(n1) == 0)
         return -1;
     return 0; //if num1 = num2
 }
@@ -194,7 +194,8 @@ int quickSort(void* toSort, int(*comparator)(void*,void*))
     if(!quickSort(lHead,comparator))
     {
         printf("%s\n",pivot->val);
-        free(pivot->val);
+        if(pivot->val != "")
+            free(pivot->val);
         free(pivot);
     }
     return quickSort(rHead,comparator);
@@ -262,7 +263,14 @@ int main(int argc,char** argv)
         return 0;
     }
     free(c);
-    int cmpType = atoi(list->val);
+    node* ptr = list;
+    int cmpType;
+    while(ptr!=NULL)
+    {
+        if(strlen(ptr->val) > 0)
+            cmpType = atoi(ptr->val);
+        ptr= ptr->next;
+    }
     if(sortType == 1)
     {
         if(cmpType != 0)

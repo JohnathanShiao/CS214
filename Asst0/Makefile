@@ -1,4 +1,4 @@
 all:
-	gcc -g fileSort.c -o fileSort 
+	gcc -g fileSort.c -o fileSort
 clean:
-	rm -r fileSort
+	rm -rf fileSort
