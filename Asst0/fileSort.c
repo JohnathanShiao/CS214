@@ -25,7 +25,8 @@ void freeList(node* head)
     {
         temp = head;
         head = head->next;
-        free(temp->val);
+        if(strlen(temp->val) != 0)
+            free(temp->val);
         free(temp);
     }
 }
@@ -68,9 +69,15 @@ int comparator_int(void* n1, void* n2)
 {
     int num1 = atoi(n1);
     int num2 = atoi(n2);
-    if(num1 > num2 || strlen(n2) == 0)
+    if(strlen(n1) == 0 && strlen(n2) == 0)
+        return 0;
+    else if(strlen(n1) != 0 && strlen(n2) == 0)
         return 1;
-    else if(num1 < num2 || strlen(n1) == 0)
+    else if(strlen(n1) == 0 && strlen(n2) != 0)
+        return -1;
+    else if(num1 > num2)
+        return 1;
+    else if(num1 < num2)
         return -1;
     return 0; //if num1 = num2
 }
@@ -264,11 +271,13 @@ int main(int argc,char** argv)
     }
     free(c);
     node* ptr = list;
-    int cmpType;
-    while(ptr!=NULL)
+    int cmpType = -1;
+    while(ptr!=NULL && cmpType == -1)
     {
         if(strlen(ptr->val) > 0)
             cmpType = atoi(ptr->val);
+        else if(ptr->val == "0")
+            cmpType = 1;
         ptr= ptr->next;
     }
     if(sortType == 1)
