@@ -237,7 +237,7 @@ int main(int argc,char** argv)
     char* c = malloc(sizeof(char));
     node* head = NULL;                  //linked list of chars to create a token
     node* temp;
-    node* list = NULL;                  //linked list of tokens from file
+    node* list = NULL;                 //linked list of tokens from file
     length = 0;
     while(read(fd,c,1) > 0)
     {
