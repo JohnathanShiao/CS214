@@ -225,6 +225,8 @@ int main(int argc,char** argv)
         printf("Fatal Error: not enough arguments, expected two arguments but received %d\n", (argc - 1));
         return 0;
     }
+    if(argc > 3)
+        printf("Warning: More than one file was passed, only the first file will be sorted");
     int sortType;
     char* file = argv[2];   
     char* sort = argv[1];
