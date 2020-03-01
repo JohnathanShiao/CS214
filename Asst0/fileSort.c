@@ -226,7 +226,7 @@ int main(int argc,char** argv)
         return 0;
     }
     if(argc > 3)
-        printf("Warning: More than one file was passed, only the first file will be sorted");
+        printf("Warning: More than one file was passed, only the first file will be sorted\n");
     int sortType;
     char* file = argv[2];   
     char* sort = argv[1];
