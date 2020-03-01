@@ -2,18 +2,28 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
-#include <ctype.h>
 
 typedef struct node{
     char* val;
     struct node* next;
 }node;
 
+void* myMalloc(int size)
+{
+    void* temp = calloc(1,size);
+    if(temp == NULL)
+    {
+        printf("Error, malloc has returned NULL, Aborting now.\n");
+        exit(1);
+    }
+    return temp;
+}
+
 int length;
 
 node* initNode()
 {
-    node* temp = malloc(sizeof(node));
+    node* temp = myMalloc(sizeof(node));
     temp->next = NULL;
     return temp;
 }
@@ -49,7 +59,7 @@ node* insert(node* head, node* temp)
 
 node* addToList(node* head,node* word)
 {
-    char* w = calloc(length, sizeof(char));
+    char* w = myMalloc(length * sizeof(char));
     int i;
     for(i = 0;i<length;i++)
     {
@@ -128,7 +138,7 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
     node* head = (node*) toSort;
     if(head == NULL) 
         return 0;
-	node* sorted = malloc(sizeof(node));
+	node* sorted = myMalloc(sizeof(node));
 	sorted->val = head->val;
 	sorted->next = NULL;
     if(head->next != NULL) //more than one node
@@ -136,7 +146,7 @@ int insertionSort(void* toSort, int (*comparator)(void*, void*))
 		node* ptr = NULL;
 		for(ptr = head->next; ptr != NULL; ptr = ptr->next)
 		{
-			node* temp = malloc(sizeof(node));
+			node* temp = myMalloc(sizeof(node));
 			temp->val = ptr->val;
 	
 			if(comparator(temp->val, sorted->val) == -1)
@@ -234,10 +244,10 @@ int main(int argc,char** argv)
         close(fd);
         return 0;
     }
-    char* c = malloc(sizeof(char));
+    char* c = myMalloc(sizeof(char));
     node* head = NULL;                  //linked list of chars to create a token
     node* temp;
-    node* list = NULL;                 //linked list of tokens from file
+    node* list = NULL;                  //linked list of tokens from file
     length = 0;
     while(read(fd,c,1) > 0)
     {
@@ -247,7 +257,7 @@ int main(int argc,char** argv)
             {
                 length+=1;
                 temp = initNode();
-                temp->val = calloc(1, sizeof(char));
+                temp->val = myMalloc(sizeof(char));
                 memcpy(temp->val,c,1);
                 head = insert(head,temp);
             }
