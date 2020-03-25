@@ -32,12 +32,15 @@ node* initNode()
     return temp;
 }
 
-void decompress(node* root, char* path)
+void decompress(node* root, char* file)
 {
-    int fd = open(path,O_RDONLY);
+    int fd = open(file,O_RDONLY);
     if (fd < 0)
         return;
-    int wfd = open("decompress.txt", O_WRONLY | O_APPEND);
+    int len = strlen(file);
+    char* fileName = myMalloc(len-4);
+    memcpy(fileName,file,len-4);
+    int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
         return;
     char* c = myMalloc(sizeof(char));
