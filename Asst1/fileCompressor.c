@@ -4,6 +4,7 @@
 #include <string.h>
 
 int length;
+int recursive;
 
 typedef struct node
 {
@@ -128,24 +129,35 @@ void decompress(node* root, char* file)
             if(ptr->data != NULL)
             {
                 write(wfd,ptr->data,strlen(ptr->data));
-                write(wfd," ",1);
                 ptr = root;
             }
         }
-        else
+        else if (*c == '1')
         {
             ptr = ptr->right;
             if(ptr->data != NULL)
             {
                 write(wfd,ptr->data,strlen(ptr->data));
-                write(wfd," ",1);
                 ptr = root;
             }
         }
+        else
+            ptr = root;
     }
 }
 
-node* genTree(list* head)
+int isControl(char* temp,char* escape)
+{
+    int i = 0;
+    for(i;i<strlen(escape);i++)
+    {
+        if(temp[i] != escape[i])
+            return 0;
+    }
+    return 1;
+}
+
+node* genTree(list* head,char* escape)
 {
     node* root = initNode();
     node* temp = root;
@@ -183,8 +195,21 @@ node* genTree(list* head)
             }
             i++;
         }
-        temp->data = myMalloc(strlen(ptr->data)+1);
-        memcpy(temp->data,ptr->data,strlen(ptr->data)+1);
+
+        if(isControl(ptr->data,escape))
+        {
+            temp->data = myMalloc(1);
+            if(ptr->data[strlen(ptr->data)-1] == 't')
+                temp->data[0] = '\t';
+            else
+                temp->data[0] = '\n';
+        }
+
+        else
+        {
+            temp->data = myMalloc(strlen(ptr->data)+1);
+            memcpy(temp->data,ptr->data,strlen(ptr->data)+1);
+        }
         i=0;
         if(ptr->next == NULL)
             break;
@@ -244,15 +269,32 @@ node* loadBook(char* file)
     token = token->next;
     free(temp->data);
     free(temp);
-    return genTree(token);
+    return genTree(token,escape);
 }
 
 int main(int argc, char** argv)
 {
-    char* flag = argv[1];
-    char* path = argv[2];
-    char* book = argv[3];
-    node* root = loadBook(book);
-    decompress(root,path);
+    if(argc < 3 || argc > 4)
+    {
+        printf("Error: Expected 3-4 arguments, received %d",argc);
+        return 0;
+    }
+    if(argc == 4)
+        recursive = 1;
+    else
+        recursive = 0;
+    char* flag;
+    if(strcmp(argv[1],"-R")==0)
+        flag = argv[2];
+    else
+        flag = argv[1];
+    char* path = argv[2 + (argc-3)];
+    if(strcmp(flag,"-b") == 0)
+    {
+        char* book = argv[3 + (argc-3)];
+        node* root = loadBook(book);
+        decompress(root,path);
+        freeNode(root);
+    }
     return 0;
 }
