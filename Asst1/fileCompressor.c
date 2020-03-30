@@ -274,12 +274,12 @@ node* loadBook(char* file)
 
 int main(int argc, char** argv)
 {
-    if(argc < 3 || argc > 4)
+    if(argc < 2 || argc > 5)
     {
-        printf("Error: Expected 3-4 arguments, received %d",argc);
+        printf("Error: Expected 2-4 arguments, received %d",argc);
         return 0;
     }
-    if(argc == 4)
+    if(argc == 5)
         recursive = 1;
     else
         recursive = 0;
@@ -288,10 +288,10 @@ int main(int argc, char** argv)
         flag = argv[2];
     else
         flag = argv[1];
-    char* path = argv[2 + (argc-3)];
+    char* path = argv[2 + (argc-4)];
     if(strcmp(flag,"-b") == 0)
     {
-        char* book = argv[3 + (argc-3)];
+        char* book = argv[3 + (argc-4)];
         node* root = loadBook(book);
         decompress(root,path);
         freeNode(root);
