@@ -37,7 +37,6 @@ node* initNode()
     temp->left = NULL;
     temp->right = NULL;
     temp->count = 0;
-    temp->data = NULL;
     return temp;
 }
 
@@ -47,6 +46,8 @@ void freeNode(node* root)
         return;
     freeNode(root->left);
     freeNode(root->right);
+    if(root->data != NULL)
+        free(root->data);
     free(root);
 }
 
@@ -54,7 +55,7 @@ list* initList()
 {
     list* temp = myMalloc(sizeof(list));
     temp->next = NULL;
-    temp->data = myMalloc(128);
+    temp->data = myMalloc(64);
     return temp;
 }
 
@@ -108,6 +109,7 @@ void decompress(node* root, char* file)
     if (fd < 0)
     {
         printf("Error, could not find %s in this directory.\n",file);
+        close(fd);
         return;
     }
     int len = strlen(file);
@@ -117,6 +119,8 @@ void decompress(node* root, char* file)
     if (wfd < 0)
     {
         printf("Error, could not create a new file named %s in this directory.\n",fileName);
+        close(fd);
+        close(wfd);
         return;
     }
     char* c = myMalloc(sizeof(char));
@@ -144,6 +148,10 @@ void decompress(node* root, char* file)
         else
             ptr = root;
     }
+    free(c);
+    free(fileName);
+    close(fd);
+    close(wfd);
 }
 
 int isControl(char* temp,char* escape)
@@ -195,7 +203,6 @@ node* genTree(list* head,char* escape)
             }
             i++;
         }
-
         if(isControl(ptr->data,escape))
         {
             temp->data = myMalloc(1);
@@ -204,7 +211,6 @@ node* genTree(list* head,char* escape)
             else
                 temp->data[0] = '\n';
         }
-
         else
         {
             temp->data = myMalloc(strlen(ptr->data)+1);
@@ -218,6 +224,7 @@ node* genTree(list* head,char* escape)
         temp = root;
     }
     freeList(head);
+    free(escape);
     return root;
 }
 
@@ -227,6 +234,7 @@ node* loadBook(char* file)
     if(fd<0)
     {
         printf("Could not find the codebook %s in this directory.\n",file);
+        close(fd);
         return NULL;
     }
     char* c = myMalloc(sizeof(char));
@@ -254,8 +262,7 @@ node* loadBook(char* file)
                 head = NULL;
             }
         }
-    }  
-    freeList(head);
+    }
     if(token == NULL)
     {
         printf("Error: codebook is empty, unable to decompress.\n");
@@ -263,6 +270,7 @@ node* loadBook(char* file)
         return NULL;
     }
     free(c);
+    close(fd);
     char* escape = myMalloc(32);
     memcpy(escape,token->data,strlen(token->data)+1);
     temp = token;
