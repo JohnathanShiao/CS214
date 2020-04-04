@@ -1,0 +1,11 @@
+ds1576
+ml1417
+
+We tested each individual part of this program before we combined them, making sure to
+include edge cases and testing out the warning and error messages that are within.
+For decompress, we borrowed the tree from the example and manually wrote some bitstrings.
+We would have an example text document that we would then run diff on to make sure that
+all the characters were exactly the same, as well as all the delimiters were working properly.
+For encoding, it was harder to test, because the only way you could do so was to decode
+and hope that it was the same as when you started. If there was any error, it could have been either
+decode or encode that had the issue.
