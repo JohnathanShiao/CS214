@@ -55,7 +55,7 @@ list* initList()
 {
     list* temp = myMalloc(sizeof(list));
     temp->next = NULL;
-    temp->data = myMalloc(64);
+    temp->data = NULL;
     return temp;
 }
 
@@ -66,7 +66,7 @@ void freeList(list* head)
     {
         temp = head;
         head = head->next;
-        if(strlen(temp->data) != 0)
+        if(temp->data != NULL)
             free(temp->data);
         free(temp);
     }
@@ -115,7 +115,7 @@ void decompress(node* root, char* file)
     int len = strlen(file);
     char* fileName = myMalloc(len-4);
     memcpy(fileName,file,len-4);
-    int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00644);
+    int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
     {
         printf("Error, could not create a new file named %s in this directory.\n",fileName);
@@ -280,6 +280,113 @@ node* loadBook(char* file)
     return genTree(token,escape);
 }
 
+int encode(char* word, node* root, char* code,int i)
+{
+    if(root == NULL)
+        return 0;
+    if(root->data != NULL)
+        if(strcmp(word,root->data) == 0)
+            return 1;
+    if(encode(word, root->left,code,i+1))
+    {
+        code[i] = '0';
+        return 1;
+    }
+    else if(encode(word,root->right,code,i+1))
+    {
+        code[i] = '1';
+        return 1;
+    }
+}
+
+void compress(char* path, node* root)
+{
+    int fd = open(path,O_RDONLY);
+    if (fd < 0)
+    {
+        printf("Error, could not find %s in this directory.\n",path);
+        close(fd);
+        return;
+    }
+    int len = strlen(path);
+    char* fileName = myMalloc(len+4);
+    memcpy(fileName,path,len);
+    memcpy(fileName+len,".hcz",4);
+    int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
+    if (wfd < 0)
+    {
+        printf("Error, could not create a new file named %s in this directory.\n",fileName);
+        close(fd);
+        close(wfd);
+        return;
+    }
+    char* c = myMalloc(sizeof(char));
+    char* code = myMalloc(8);
+    node* ptr = root;
+    list* token = NULL;
+    list* temp;
+    list* head = NULL;
+    while(read(fd,c,1) > 0)
+    {
+       if(*c != '\n' && *c != '\t' && *c != ' ')
+        {
+            length+=1;
+            temp = initList();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            if(length!=0)
+            {
+                token = addToToken(token,head);
+                encode(token->data,root,code,0);
+                if(strlen(code) == 0)
+                {
+                    printf("Error, %s does not exist in the codebook, Aborting.\n");
+                    exit(1);
+                }
+                write(wfd,code,strlen(code));
+                free(code);
+                code = myMalloc(8);
+                length=0;
+                freeList(head);
+                freeList(token);
+                token = NULL;
+                head = NULL;
+            }
+            if(*c == ' ' || *c == '\n' || *c == '\t')   
+            {
+                encode(c,root,code,0);
+                if(strlen(code) == 0)
+                {
+                    printf("Error, a delimiter does not exist in the codebook, Aborting.\n");
+                    exit(1);
+                }
+                write(wfd,code,strlen(code));
+                free(code);
+                code = myMalloc(8);
+            }
+        }
+    }
+    if(length > 0)
+        token = addToToken(token,head);
+    freeList(head);
+    encode(token->data,root,code,0);
+    if(strlen(code) == 0)
+    {
+        printf("Error, %s does not exist in the codebook, Aborting.\n");
+        exit(1);
+    }
+    write(wfd,code,strlen(code));
+    freeList(token);
+    free(c);
+    free(fileName);
+    close(fd);
+    close(wfd);
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 2 || argc > 5)
@@ -291,17 +398,20 @@ int main(int argc, char** argv)
         recursive = 1;
     else
         recursive = 0;
-    char* flag;
-    if(strcmp(argv[1],"-R")==0)
-        flag = argv[2];
-    else
-        flag = argv[1];
+    char* flag = argv[1+(argc-4)];
     char* path = argv[2 + (argc-4)];
-    if(strcmp(flag,"-b") == 0)
+    if(strcmp(flag,"-d") == 0)
     {
         char* book = argv[3 + (argc-4)];
         node* root = loadBook(book);
         decompress(root,path);
+        freeNode(root);
+    }
+    else if(strcmp(flag,"-c") == 0)
+    {
+        char* book = argv[3 + (argc-4)];
+        node* root = loadBook(book);
+        compress(path,root);
         freeNode(root);
     }
     return 0;
