@@ -344,7 +344,7 @@ void compress(char* path, node* root)
                 encode(token->data,root,code,0);
                 if(strlen(code) == 0)
                 {
-                    printf("Error, %s does not exist in the codebook, Aborting.\n");
+                    printf("Error, something does not exist in the codebook, Aborting.\n");
                     exit(1);
                 }
                 write(wfd,code,strlen(code));
@@ -376,10 +376,11 @@ void compress(char* path, node* root)
     encode(token->data,root,code,0);
     if(strlen(code) == 0)
     {
-        printf("Error, %s does not exist in the codebook, Aborting.\n");
+        printf("Error, something does not exist in the codebook, Aborting.\n");
         exit(1);
     }
     write(wfd,code,strlen(code));
+    free(code);
     freeList(token);
     free(c);
     free(fileName);
@@ -391,7 +392,7 @@ int main(int argc, char** argv)
 {
     if(argc < 2 || argc > 5)
     {
-        printf("Error: Expected 2-4 arguments, received %d",argc);
+        printf("Error: Expected 2-4 arguments, received %d\n",argc);
         return 0;
     }
     if(argc == 5)
