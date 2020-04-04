@@ -3,6 +3,9 @@
 #include <fcntl.h>
 #include <string.h>
 
+int length;
+int recursive;
+
 typedef struct node
 {
     int count;
@@ -11,12 +14,11 @@ typedef struct node
     struct node* right;
 }node;
 
-typedef struct minheap
+typedef struct list
 {
-	int size;
-	int capacity;
-	node** list;
-}minheap;
+    char* data;
+    struct list* next;
+}list;
 
 void* myMalloc(int size)
 {
@@ -35,83 +37,92 @@ node* initNode()
     temp->left = NULL;
     temp->right = NULL;
     temp->count = 0;
+    return temp;
+}
+
+void freeNode(node* root)
+{
+    if(root == NULL)
+        return;
+    freeNode(root->left);
+    freeNode(root->right);
+    if(root->data != NULL)
+        free(root->data);
+    free(root);
+}
+
+list* initList()
+{
+    list* temp = myMalloc(sizeof(list));
+    temp->next = NULL;
     temp->data = NULL;
     return temp;
 }
-node* initHeapNode(char* data, int count)
+
+void freeList(list* head)
 {
-    node* temp = myMalloc(sizeof(node));
-    temp->left = NULL;
-    temp->right = NULL;
-    temp->count = count;
-    temp->data = data;
-    return temp;
+    list* temp;
+    while(head!=NULL)
+    {
+        temp = head;
+        head = head->next;
+        if(temp->data != NULL)
+            free(temp->data);
+        free(temp);
+    }
 }
 
-minheap* initMinHeap(int capacity)
+list* insert(list* head, list* temp)
 {
-	minheap* temp = myMalloc(sizeof(minheap));
-	temp->size = 0;
-	temp->capacity = capacity;
-	temp->list = myMalloc(capacity*sizeof(node*));
-	return temp;
+    list* curr = head;
+    list* prev = NULL;
+    while(curr != NULL)
+    {
+        prev = curr;
+        curr = curr->next;
+    }
+    if(prev==NULL)
+        head = temp;
+    else
+        prev->next = temp;
+    return head;
 }
 
-void swap(node** n1, node** n2)
+list* addToToken(list* head,list* word)
 {
-	node* temp = *n1;
-	*n1 = *n2;
-	*n2 = temp;
+    char* w = myMalloc(length * sizeof(char));
+    int i;
+    for(i = 0;i<length;i++)
+    {
+        w[i] = *word->data;
+        word = word->next;
+    }
+    list* temp = initList();
+    temp->data = w;
+    head = insert(head,temp);
+    return head;
 }
-
-void heapify(minheap* m, int n)
-{
-	int min = n;
-	int left = (2*n) + 1;
-	int right = (2*n) + 2;
-	
-	if((left < m->size) && ((m->list[left]->count) < (m->list[min]->count)))
-		min = left;
-
-	if((right < m->size) && ((m->list[right]->count) < (m->list[min]->count)))
-		min = right;
-
-	if(min != n){
-		swap(&m->list[min], &m->list[n]);
-		heapify(m, min);
-	}
-}
-
-minheap* buildMinHeap(char* data, int* count, int size) //in main need to keep count of how many tokens there are
-{
-	minheap* minheap = initMinHeap(size);
-	int i;
-	for(i = 0; i < size; i++)
-	{
-		minheap->list[i] = initHeapNode(data[i], count[i]);
-	}
-	minheap->size = size;
-	
-	int n = (minheap->size)-1;
-	int j;
-	for(j = (n-1)/2; i >= 0; --i)
-		heapify(minheap, i); 
-
-	return minheap;
-}
-
 
 void decompress(node* root, char* file)
 {
     int fd = open(file,O_RDONLY);
     if (fd < 0)
+    {
+        printf("Error, could not find %s in this directory.\n",file);
+        close(fd);
         return;
+    }
     int len = strlen(file);
     char* fileName = myMalloc(len-4);
     memcpy(fileName,file,len-4);
     int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
+    {
+        printf("Error, could not create a new file named %s in this directory.\n",fileName);
+        close(fd);
+        close(wfd);
         return;
+    }
     char* c = myMalloc(sizeof(char));
     node* ptr = root;
     while(read(fd,c,1) > 0)
@@ -122,86 +133,287 @@ void decompress(node* root, char* file)
             if(ptr->data != NULL)
             {
                 write(wfd,ptr->data,strlen(ptr->data));
-                write(wfd," ",1);
                 ptr = root;
             }
         }
-        else
+        else if (*c == '1')
         {
             ptr = ptr->right;
             if(ptr->data != NULL)
             {
                 write(wfd,ptr->data,strlen(ptr->data));
-                write(wfd," ",1);
                 ptr = root;
             }
         }
+        else
+            ptr = root;
     }
+    free(c);
+    free(fileName);
+    close(fd);
+    close(wfd);
+}
+
+int isControl(char* temp,char* escape)
+{
+    int i = 0;
+    for(i;i<strlen(escape);i++)
+    {
+        if(temp[i] != escape[i])
+            return 0;
+    }
+    return 1;
+}
+
+node* genTree(list* head,char* escape)
+{
+    node* root = initNode();
+    node* temp = root;
+    list* ptr = head;
+    int count = 0;
+    while(ptr!=NULL)
+    {
+        ptr=ptr->next;
+        count++;
+    }
+    if(count%2!=0)
+    {
+        printf("Error: Key value pairs are improperly formatted, aborting.\n");
+        return NULL;
+    }
+    ptr = head->next;
+    list* prev = head;
+    int i = 0;
+    while(ptr != NULL && prev != NULL)
+    {
+        char* path = prev->data;
+        while(path[i])
+        {
+            if(path[i] == '0')
+            {
+                if(temp->left == NULL)
+                    temp->left = initNode();
+                temp = temp->left;
+            }
+            else
+            {
+                if(temp->right == NULL)
+                    temp->right = initNode();
+                temp=temp->right;
+            }
+            i++;
+        }
+        if(isControl(ptr->data,escape))
+        {
+            temp->data = myMalloc(1);
+            if(ptr->data[strlen(ptr->data)-1] == 't')
+                temp->data[0] = '\t';
+            else
+                temp->data[0] = '\n';
+        }
+        else
+        {
+            temp->data = myMalloc(strlen(ptr->data)+1);
+            memcpy(temp->data,ptr->data,strlen(ptr->data)+1);
+        }
+        i=0;
+        if(ptr->next == NULL)
+            break;
+        prev = ptr->next;
+        ptr = prev->next;
+        temp = root;
+    }
+    freeList(head);
+    free(escape);
+    return root;
+}
+
+node* loadBook(char* file)
+{
+    int fd = open(file, O_RDONLY);
+    if(fd<0)
+    {
+        printf("Could not find the codebook %s in this directory.\n",file);
+        close(fd);
+        return NULL;
+    }
+    char* c = myMalloc(sizeof(char));
+    list* head = NULL;                  //linked list of chars to create a token
+    list* temp;
+    list* token = NULL;                  //linked list of tokens from file
+    length = 0;
+    while(read(fd,c,1) > 0)
+    {
+        if(*c != '\n' && *c != '\t')
+        {
+            length+=1;
+            temp = initList();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            if(length!=0)
+            {
+                token = addToToken(token,head);
+                length=0;
+                freeList(head);
+                head = NULL;
+            }
+        }
+    }
+    if(token == NULL)
+    {
+        printf("Error: codebook is empty, unable to decompress.\n");
+        close(fd);
+        return NULL;
+    }
+    free(c);
+    close(fd);
+    char* escape = myMalloc(32);
+    memcpy(escape,token->data,strlen(token->data)+1);
+    temp = token;
+    token = token->next;
+    free(temp->data);
+    free(temp);
+    return genTree(token,escape);
+}
+
+int encode(char* word, node* root, char* code,int i)
+{
+    if(root == NULL)
+        return 0;
+    if(root->data != NULL)
+        if(strcmp(word,root->data) == 0)
+            return 1;
+    if(encode(word, root->left,code,i+1))
+    {
+        code[i] = '0';
+        return 1;
+    }
+    else if(encode(word,root->right,code,i+1))
+    {
+        code[i] = '1';
+        return 1;
+    }
+}
+
+void compress(char* path, node* root)
+{
+    int fd = open(path,O_RDONLY);
+    if (fd < 0)
+    {
+        printf("Error, could not find %s in this directory.\n",path);
+        close(fd);
+        return;
+    }
+    int len = strlen(path);
+    char* fileName = myMalloc(len+4);
+    memcpy(fileName,path,len);
+    memcpy(fileName+len,".hcz",4);
+    int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
+    if (wfd < 0)
+    {
+        printf("Error, could not create a new file named %s in this directory.\n",fileName);
+        close(fd);
+        close(wfd);
+        return;
+    }
+    char* c = myMalloc(sizeof(char));
+    char* code = myMalloc(8);
+    node* ptr = root;
+    list* token = NULL;
+    list* temp;
+    list* head = NULL;
+    while(read(fd,c,1) > 0)
+    {
+       if(*c != '\n' && *c != '\t' && *c != ' ')
+        {
+            length+=1;
+            temp = initList();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            if(length!=0)
+            {
+                token = addToToken(token,head);
+                encode(token->data,root,code,0);
+                if(strlen(code) == 0)
+                {
+                    printf("Error, something does not exist in the codebook, Aborting.\n");
+                    exit(1);
+                }
+                write(wfd,code,strlen(code));
+                free(code);
+                code = myMalloc(8);
+                length=0;
+                freeList(head);
+                freeList(token);
+                token = NULL;
+                head = NULL;
+            }
+            if(*c == ' ' || *c == '\n' || *c == '\t')   
+            {
+                encode(c,root,code,0);
+                if(strlen(code) == 0)
+                {
+                    printf("Error, a delimiter does not exist in the codebook, Aborting.\n");
+                    exit(1);
+                }
+                write(wfd,code,strlen(code));
+                free(code);
+                code = myMalloc(8);
+            }
+        }
+    }
+    if(length > 0)
+        token = addToToken(token,head);
+    freeList(head);
+    encode(token->data,root,code,0);
+    if(strlen(code) == 0)
+    {
+        printf("Error, something does not exist in the codebook, Aborting.\n");
+        exit(1);
+    }
+    write(wfd,code,strlen(code));
+    free(code);
+    freeList(token);
+    free(c);
+    free(fileName);
+    close(fd);
+    close(wfd);
 }
 
 int main(int argc, char** argv)
 {
-	
-    char* flag = argv[1];
-    char* path = argv[2];
-    node* root = initNode();
-    node* ptr;
-    root->count = 100;
-    root->left = initNode();
-    ptr = root->left;
-    ptr->count = 45;
-    ptr->data = "and";
-    root->right = initNode();
-    ptr = root->right;
-    ptr->count = 55;
-    ptr->left = initNode();
-    ptr->right = initNode();
-    ptr = ptr->left;
-    ptr->count = 25;
-    ptr->left = initNode();
-    ptr->right = initNode();
-    ptr = ptr->left;
-    ptr->data = "cat";
-    ptr->count = 12;
-    ptr = root;
-    ptr = ptr->right;
-    ptr = ptr->left;
-    ptr = ptr->right;
-    ptr->data = "button";
-    ptr->count = 13;
-    ptr = root;
-    ptr = ptr->right;
-    ptr = ptr->right;
-    ptr->left = initNode();
-    ptr->right = initNode();
-    ptr->count = 30;
-    ptr = ptr->right;
-    ptr->data = "ball";
-    ptr->count = 16;
-    ptr = root;
-    ptr = ptr->right;
-    ptr = ptr->right;
-    ptr = ptr->left;
-    ptr->left = initNode();
-    ptr->right = initNode();
-    ptr->count = 14;
-    ptr = ptr->left;
-    ptr->data = "a";
-    ptr->count = 5;
-    ptr = root;
-    ptr = ptr->right;
-    ptr = ptr->right;
-    ptr = ptr->left;
-    ptr = ptr->right;
-    ptr->data = "dog";
-    ptr->count = 9;
-    decompress(root,path);
-
-	char arr[] = {'a', 'b', 'c', 'd', 'e', 'f'};
-	int freq[] = {5, 9, 12, 13, 16, 45};
-
-	int size = 6;
-
-	minheap* m = buildMinHeap(arr, freq, size);
+    if(argc < 2 || argc > 5)
+    {
+        printf("Error: Expected 2-4 arguments, received %d\n",argc);
+        return 0;
+    }
+    if(argc == 5)
+        recursive = 1;
+    else
+        recursive = 0;
+    char* flag = argv[1+(argc-4)];
+    char* path = argv[2 + (argc-4)];
+    if(strcmp(flag,"-d") == 0)
+    {
+        char* book = argv[3 + (argc-4)];
+        node* root = loadBook(book);
+        decompress(root,path);
+        freeNode(root);
+    }
+    else if(strcmp(flag,"-c") == 0)
+    {
+        char* book = argv[3 + (argc-4)];
+        node* root = loadBook(book);
+        compress(path,root);
+        freeNode(root);
+    }
     return 0;
 }
