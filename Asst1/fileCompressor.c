@@ -5,6 +5,7 @@
 
 int length;
 int recursive;
+int numEntries = 0;
 
 typedef struct node
 {
@@ -25,6 +26,13 @@ typedef struct list
     char* data;
     struct list* next;
 }list;
+
+typedef struct minheap
+{
+	int size;
+	int max;
+	node** array;
+}minheap;
 
 void* myMalloc(int size)
 {
@@ -394,9 +402,77 @@ void compress(char* path, node* root)
     close(wfd);
 }
 
+void free_hash(LLNode** hash_table)
+{
+	int i;
+	for(i = 0; i < 20; i++) 
+	{
+		LLNode* temp = hash_table[i];
+		while(temp != NULL)
+		{
+			LLNode* temp2 = temp;
+			temp = temp->next;
+			free(temp2);
+		}	
+	}
+}
+
+void swap(node** n1, node**n2)
+{
+	node* temp = *n1;
+	*n1 = *n2;
+	*n2 = temp;
+}
+
+void heapify(minheap* m, int n)
+{
+	int min = n;
+	int left = 2*n + 1;
+	int right = 2*n + 2;
+	
+	if((left < m->size) && ((m->array[left]->count) < (m->array[min]->count)))
+		min = left;
+
+	if((right < m->size) && ((m->array[right]->count) < (m->array[min]->count)))
+		min = right;
+
+	if(min != n){
+		swap(&m->array[min], &m->array[n]);
+		heapify(m, min);
+	}
+}
+
+minheap* create_minheap(LLNode** hash_table)
+{
+	minheap* minheap = myMalloc(sizeof(minheap));
+	minheap->size = numEntries;
+	minheap->max = numEntries;
+	minheap->array = myMalloc(minheap->max*sizeof(node*));
+	int i;
+	int j = 0;
+	for(i = 0; i < 20; i++)			//close to free hash maybe combine in future
+	{
+		LLNode* temp = hash_table[i];
+		while(temp != NULL)
+		{
+			minheap->array[j] = initNode();
+			minheap->array[j]->data = temp->data;
+			minheap->array[j]->count = temp->freq;
+			j++;
+			temp = temp->next;
+		}
+	}
+	int num = minheap->size -1;
+	int k;
+	for(k = (num-1)/2; i >= 0; --i)
+		heapify(minheap, k);
+	
+	return minheap;
+}
+
 LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 {
-	int bucket = ascii_value % 5; //5 = number of elements for testing
+	int bucket = ascii_value % 20; 
 	LLNode* ptr;
 	for(ptr = hash_table[bucket]; ptr != NULL; ptr = ptr->next){
 		if(strcmp(ptr->data, string) == 0){
@@ -409,10 +485,11 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	temp->freq = 1;
 	temp->next = hash_table[bucket]; 
 	hash_table[bucket] = temp;
+	numEntries++;
 	return hash_table;
 }
 
-LLNode** build_hashtable(char* file){
+minheap* build_minheap(char* file){
 	int fd = open(file, O_RDONLY);
     if(fd < 0)
     {
@@ -488,22 +565,79 @@ LLNode** build_hashtable(char* file){
 		}
 	}
 	free(c);
+	if(numEntries == 0)
+	{
+		printf("Error, file is empty. Cannot build Huffman Codebook.\n");
+		free_hash(hash_table);
+		free(hash_table);
+		close(fd);
+		exit(0);
+	}
+	minheap* minheap = create_minheap(hash_table);
+	free_hash(hash_table);
+	free(hash_table);
 	close(fd);
-	return hash_table;
+	return minheap;
 }
 
-void free_hash(LLNode** hash_table)
+node* extract_min(minheap* minheap)
 {
-	int i;
-	for(i = 0; i < 20; i++) 
+	node* temp = minheap->array[0];
+	minheap->array[0] = minheap->array[(minheap->size) -1];
+	--minheap->size;
+	heapify(minheap, 0);
+	return temp;
+}
+
+void insert_minheap(minheap* minheap, node* top)
+{
+	++minheap->size;
+	int n = (minheap->size)-1;
+	while(n && top->count < minheap->array[(n-1)/2]->count)
 	{
-		LLNode* temp = hash_table[i];
-		while(temp != NULL)
-		{
-			LLNode* temp2 = temp;
-			temp = temp->next;
-			free(temp2);
-		}	
+		minheap->array[n] = minheap->array[(n-1)/2];
+		n = (n-1)/2;
+	}
+	minheap->array[n] = top;
+}
+
+node* build_huffmantree(minheap* minheap)
+{
+	node* left;
+	node* right;
+	node* top;
+	while(!(minheap->size == 1))
+	{
+		left = extract_min(minheap);
+		right = extract_min(minheap);
+		top = initNode();
+		top->data = "added";
+		top->count = (left->count)+(right->count);
+		top->left = left;
+		top->right = right;
+		insert_minheap(minheap, top);
+	}
+	return extract_min(minheap);
+}
+
+void get_huffmancodebook(node* root, int arr[], int top)
+{
+	if(root->left)
+	{
+		arr[top] = 0;
+		get_huffmancodebook(root->left, arr, top+1);
+	}
+	if(root->right)
+	{
+		arr[top] = 1;
+		get_huffmancodebook(root->right, arr, top+1);
+	}
+	if((!(root->left)) && (!(root->right)))
+	{
+		int i;
+		for(i = 0; i < top; ++i)
+			printf("%d", arr[i]);
+	printf("\t%s\n", root->data);
 	}
 }
 
@@ -511,35 +645,35 @@ int main(int argc, char** argv)
 {
     if(argc < 3 || argc > 5)
     {
-        printf("Error: Expected 3-4 arguments, received %d\n",argc);
+        printf("Error: Expected 3-5 arguments, received %d\n",argc);
         return 0;
     }
-    if(argc == 5)
+    if(argc == 5)	//not neccessarily? recursive build doesn't need 5th
         recursive = 1;
     else
         recursive = 0;
-    char* flag = argv[1+(argc-4)];
-    char* path = argv[2 + (argc-4)];
+    char* flag = argv[1+(argc-3)];
+    char* path = argv[2 + (argc-3)];
     if(strcmp(flag,"-d") == 0)
     {
-        char* book = argv[3 + (argc-4)];
+        char* book = argv[3 + (argc-3)]; 
         node* root = loadBook(book);
         decompress(root,path);
         freeNode(root);
     }
     else if(strcmp(flag,"-c") == 0)
     {
-        char* book = argv[3 + (argc-4)];
+        char* book = argv[3 + (argc-3)]; 
         node* root = loadBook(book);
         compress(path,root);
         freeNode(root);
     }else if(strcmp(flag, "-b") == 0)
 	{
-		LLNode** hash_table = build_hashtable(path);
-   	 	free_hash(hash_table);
-		free(hash_table);
+		minheap* minheap = build_minheap(path);
+		node* root = build_huffmantree(minheap);		
+		int arr[numEntries], top = 0;
+		get_huffmancodebook(root, arr, top);
+		//freeNode(root); caused error?
 	}
-
-
     return 0;
 }
