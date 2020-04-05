@@ -396,7 +396,6 @@ void compress(char* path, node* root)
 
 LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 {
-	//printf("String: %s\tASCIIVal: %d\n", string, ascii_value);
 	int bucket = ascii_value % 5; //5 = number of elements for testing
 	LLNode* ptr;
 	for(ptr = hash_table[bucket]; ptr != NULL; ptr = ptr->next){
@@ -444,9 +443,40 @@ LLNode** build_hashtable(int fd){
 				hash_table = insert_hash(hash_table, str, ascii_value);
 				length = 0;
 				ascii_value = 0;
+				char* delim;
+				if(*c == ' ')
+				{
+					delim = myMalloc(7*sizeof(char));
+					delim = "_SPACE_";
+				}else if(*c == '\n')
+				{
+					delim = myMalloc(9*sizeof(char));
+					delim = "_NEWLINE_";
+				}else{
+					delim = myMalloc(5*sizeof(char));
+					delim = "_TAB_";
+				}
+				hash_table = insert_hash(hash_table , delim, (int)(*delim));
+				delim = NULL;
 				freeList(token);
 				freeList(temp);
-
+			}else
+			{
+				char* delim;
+				if(*c == ' ')
+				{
+					delim = myMalloc(7*sizeof(char));
+					delim = "_SPACE_";
+				}else if(*c == '\n')
+				{
+					delim = myMalloc(9*sizeof(char));
+					delim = "_NEWLINE_";
+				}else{
+					delim = myMalloc(5*sizeof(char));
+					delim = "_TAB_";
+				}
+				hash_table = insert_hash(hash_table , delim, (int)(*delim));
+				delim = NULL;			
 			}
 		}
 	}
@@ -464,8 +494,6 @@ void free_hash(LLNode** hash_table)
 		{
 			LLNode* temp2 = temp;
 			temp = temp->next;
-			printf("\n%s\t%d\n", temp2->data, temp2->freq);
-			free(temp2->data);
 			free(temp2);
 		}	
 	}
