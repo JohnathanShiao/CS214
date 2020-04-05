@@ -14,6 +14,12 @@ typedef struct node
     struct node* right;
 }node;
 
+typedef struct LLNode{
+	char* data;
+	int freq;
+	struct LLNode* next;
+}LLNode;s
+
 typedef struct list
 {
     char* data;
@@ -388,6 +394,111 @@ void compress(char* path, node* root)
     close(wfd);
 }
 
+LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
+{
+	int bucket = ascii_value % 5; //5 = number of elements for testing
+	LLNode* ptr;
+	for(ptr = hash_table[bucket]; ptr != NULL; ptr = ptr->next){
+		if(strcmp(ptr->data, string) == 0){
+			ptr->freq += 1;
+			return hash_table;
+		}
+	}
+	LLNode* temp = malloc(sizeof(LLNode));
+	temp->data = string;
+	temp->freq = 1;
+	temp->next = hash_table[bucket]; 
+	hash_table[bucket] = temp;
+	return hash_table;
+}
+
+LLNode** build_hashtable(int fd){
+	LLNode** hash_table = myMalloc(5*sizeof(LLNode*));  //5 buckets for testing
+	char* c = myMalloc(sizeof(char)); 
+	list* token = NULL;
+	list* temp;
+	int length = 0;
+	int ascii_value = 0;
+	while(read(fd, c, 1) > 0)
+	{
+		if(*c != ' ' && *c != '\n' && *c != '\t')
+		{
+			length += 1;
+			temp = initList();
+			temp->data = myMalloc(sizeof(char));
+			memcpy(temp->data, c, 1);
+			token = insert(token, temp);
+		}else
+		{
+			if(length != 0)
+			{
+				char* str = myMalloc(length * sizeof(char));
+				int i;
+				for(i = 0; i < length; i++)
+				{
+					str[i] = *token->data;
+					ascii_value += (int)str[i];
+					token = token -> next;
+				}
+				hash_table = insert_hash(hash_table, str, ascii_value);
+				length = 0;
+				ascii_value = 0;
+				char* delim;
+				if(*c == ' ')
+				{
+					delim = myMalloc(7*sizeof(char));
+					delim = "_SPACE_";
+				}else if(*c == '\n')
+				{
+					delim = myMalloc(9*sizeof(char));
+					delim = "_NEWLINE_";
+				}else{
+					delim = myMalloc(5*sizeof(char));
+					delim = "_TAB_";
+				}
+				hash_table = insert_hash(hash_table , delim, (int)(*delim));
+				delim = NULL;
+				freeList(token);
+				freeList(temp);
+			}else
+			{
+				char* delim;
+				if(*c == ' ')
+				{
+					delim = myMalloc(7*sizeof(char));
+					delim = "_SPACE_";
+				}else if(*c == '\n')
+				{
+					delim = myMalloc(9*sizeof(char));
+					delim = "_NEWLINE_";
+				}else{
+					delim = myMalloc(5*sizeof(char));
+					delim = "_TAB_";
+				}
+				hash_table = insert_hash(hash_table , delim, (int)(*delim));
+				delim = NULL;			
+			}
+		}
+	}
+	free(c);
+	return hash_table;
+}
+
+void free_hash(LLNode** hash_table)
+{
+	int i;
+	for(i = 0; i < 5; i++) //5buckets
+	{
+		LLNode* temp = hash_table[i];
+		while(temp != NULL)
+		{
+			LLNode* temp2 = temp;
+			temp = temp->next;
+			free(temp2);
+		}	
+	}
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 2 || argc > 5)
@@ -415,5 +526,10 @@ int main(int argc, char** argv)
         compress(path,root);
         freeNode(root);
     }
+
+    LLNode** hash_table = build_hashtable(fd);
+    free_hash(hash_table);
+	free(hash_table);
+	close(fd);
     return 0;
 }
