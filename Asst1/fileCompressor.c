@@ -430,10 +430,10 @@ void heapify(minheap* m, int n)
 	int left = 2*n + 1;
 	int right = 2*n + 2;
 	
-	if((left < m->size) && ((m->array[left]->count) < (m->array[min]->count)))
+	if(left < m->size && m->array[left]->count < m->array[min]->count)
 		min = left;
 
-	if((right < m->size) && ((m->array[right]->count) < (m->array[min]->count)))
+	if(right < m->size && m->array[right]->count < m->array[min]->count)
 		min = right;
 
 	if(min != n){
@@ -445,7 +445,7 @@ void heapify(minheap* m, int n)
 minheap* create_minheap(LLNode** hash_table)
 {
 	minheap* minheap = myMalloc(sizeof(minheap));
-	minheap->size = numEntries;
+	minheap->size = 0;
 	minheap->max = numEntries;
 	minheap->array = myMalloc(minheap->max*sizeof(node*));
 	int i;
@@ -462,9 +462,10 @@ minheap* create_minheap(LLNode** hash_table)
 			temp = temp->next;
 		}
 	}
-	int num = minheap->size -1;
+	minheap->size = j;
+	int num = minheap->size - 1;
 	int k;
-	for(k = (num-1)/2; i >= 0; --i)
+	for(k = (num-1)/2; k >= 0; --k)
 		heapify(minheap, k);
 	
 	return minheap;
@@ -641,6 +642,16 @@ void get_huffmancodebook(node* root, int arr[], int top)
 	}
 }
 
+void free_minheap(minheap* minheap)
+{	
+	int i;
+	for(i = 0; i < minheap->size; i++)
+	{
+		freeNode(minheap->array[i]);
+	}
+	free(minheap);
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 3 || argc > 5)
@@ -670,10 +681,11 @@ int main(int argc, char** argv)
     }else if(strcmp(flag, "-b") == 0)
 	{
 		minheap* minheap = build_minheap(path);
-		node* root = build_huffmantree(minheap);		
+		node* root = build_huffmantree(minheap);
+		free_minheap(minheap);		
 		int arr[numEntries], top = 0;
 		get_huffmancodebook(root, arr, top);
-		//freeNode(root); caused error?
+		//freeNode(root);
 	}
     return 0;
 }
