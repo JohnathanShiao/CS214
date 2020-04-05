@@ -18,7 +18,7 @@ typedef struct LLNode{
 	char* data;
 	int freq;
 	struct LLNode* next;
-}LLNode;s
+}LLNode;
 
 typedef struct list
 {
@@ -412,8 +412,15 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-LLNode** build_hashtable(int fd){
-	LLNode** hash_table = myMalloc(5*sizeof(LLNode*));  //5 buckets for testing
+LLNode** build_hashtable(char* file){
+	int fd = open(file, O_RDONLY);
+    if(fd < 0)
+    {
+        printf("Could not find the codebook %s in this directory.\n",file);
+        close(fd);
+        return NULL;
+    }
+	LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
 	char* c = myMalloc(sizeof(char)); 
 	list* token = NULL;
 	list* temp;
@@ -481,13 +488,14 @@ LLNode** build_hashtable(int fd){
 		}
 	}
 	free(c);
+	close(fd);
 	return hash_table;
 }
 
 void free_hash(LLNode** hash_table)
 {
 	int i;
-	for(i = 0; i < 5; i++) //5buckets
+	for(i = 0; i < 20; i++) 
 	{
 		LLNode* temp = hash_table[i];
 		while(temp != NULL)
@@ -501,9 +509,9 @@ void free_hash(LLNode** hash_table)
 
 int main(int argc, char** argv)
 {
-    if(argc < 2 || argc > 5)
+    if(argc < 3 || argc > 5)
     {
-        printf("Error: Expected 2-4 arguments, received %d\n",argc);
+        printf("Error: Expected 3-4 arguments, received %d\n",argc);
         return 0;
     }
     if(argc == 5)
@@ -525,11 +533,13 @@ int main(int argc, char** argv)
         node* root = loadBook(book);
         compress(path,root);
         freeNode(root);
-    }
+    }else if(strcmp(flag, "-b") == 0)
+	{
+		LLNode** hash_table = build_hashtable(path);
+   	 	free_hash(hash_table);
+		free(hash_table);
+	}
 
-    LLNode** hash_table = build_hashtable(fd);
-    free_hash(hash_table);
-	free(hash_table);
-	close(fd);
+
     return 0;
 }
