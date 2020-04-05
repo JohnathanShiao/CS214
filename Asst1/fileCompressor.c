@@ -450,7 +450,7 @@ minheap* create_minheap(LLNode** hash_table)
 	minheap->array = myMalloc(minheap->max*sizeof(node*));
 	int i;
 	int j = 0;
-	for(i = 0; i < 20; i++)			//close to free hash maybe combine in future
+	for(i = 0; i < 20; i++)
 	{
 		LLNode* temp = hash_table[i];
 		while(temp != NULL)
@@ -678,37 +678,51 @@ void free_minheap(minheap* minheap)
 
 int main(int argc, char** argv)
 {
-    if(argc < 3 || argc > 5)
+    if(argc < 3 || argc > 4)
     {
-        printf("Error: Expected 3-5 arguments, received %d\n",argc);
+        printf("Error: Expected 3-4 arguments, received %d\n",argc);
         return 0;
     }
-    if(argc == 5)	//not neccessarily? recursive build doesn't need 5th
-        recursive = 1;
-    else
-        recursive = 0;
-    char* flag = argv[1+(argc-3)];
-    char* path = argv[2 + (argc-3)];
-    if(strcmp(flag,"-d") == 0)
-    {
-        char* book = argv[3 + (argc-3)]; 
-        node* root = loadBook(book);
-        decompress(root,path);
-        freeNode(root);
-    }
-    else if(strcmp(flag,"-c") == 0)
-    {
-        char* book = argv[3 + (argc-3)]; 
-        node* root = loadBook(book);
-        compress(path,root);
-        freeNode(root);
-    }else if(strcmp(flag, "-b") == 0)
+    if(strcmp(argv[1], "-R") == 0)
+	{    
+   		recursive = 1;//then should be ./fileCompressor  -R -b/-c/-d path
+		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
+		{
+			//first step is to build a codebook from all files
+		}else
+		{
+			printf("Error, %s is not an valid flag.\n", argv[2]);
+			exit(0);
+		}
+	}else
 	{
-		minheap* minheap = build_minheap(path);
-		node* root = build_huffmantree(minheap);
-		free_minheap(minheap);
-		create_huffmancodebook(root);
-		//freeNode(root);	
+        recursive = 0;	//then should be ./fileCompressor -b/-c/-d file |codebook|
+    	char* flag = argv[1]; 
+    	char* file = argv[2];
+    	if(strcmp(flag,"-d") == 0)
+    	{
+       		char* book = argv[3]; 
+       		node* root = loadBook(book);
+        	decompress(root,file);
+        	freeNode(root);
+    	}
+    	else if(strcmp(flag,"-c") == 0)
+    	{
+    	    char* book = argv[3]; 
+    	    node* root = loadBook(book);
+    	    compress(file,root);
+    	    freeNode(root);
+   		}else if(strcmp(flag, "-b") == 0)
+		{
+			minheap* minheap = build_minheap(file);
+			node* root = build_huffmantree(minheap);
+			free_minheap(minheap);
+			create_huffmancodebook(root);
+			//freeNode(root);	
+		}else
+			printf("Error, %s is not an valid flag.\n", flag);
+			exit(0);
 	}
+	
     return 0;
 }
