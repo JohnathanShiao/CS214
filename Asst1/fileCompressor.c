@@ -621,25 +621,49 @@ node* build_huffmantree(minheap* minheap)
 	return extract_min(minheap);
 }
 
-void get_huffmancodebook(node* root, int arr[], int top)
+void get_huffmancode(node* root, char* arr, int top, int wfd)
 {
+	char* c = myMalloc(sizeof(char));
 	if(root->left)
 	{
-		arr[top] = 0;
-		get_huffmancodebook(root->left, arr, top+1);
+		arr[top] = '0';
+		get_huffmancode(root->left, arr, top+1, wfd);
 	}
 	if(root->right)
 	{
-		arr[top] = 1;
-		get_huffmancodebook(root->right, arr, top+1);
+		arr[top] = '1';
+		get_huffmancode(root->right, arr, top+1, wfd);
 	}
 	if((!(root->left)) && (!(root->right)))
 	{
 		int i;
 		for(i = 0; i < top; ++i)
-			printf("%d", arr[i]);
-	printf("\t%s\n", root->data);
+		{
+			*c = arr[i];
+			write(wfd, c, 1);
+		}
+		*c = '\t';
+		write(wfd, c, 1);
+		write(wfd, root->data, strlen(root->data));
+		*c = '\n';
+		write(wfd, c, 1);
 	}
+	free(c);
+}
+
+void create_huffmancodebook(node* root)
+{
+	int wfd = open("HuffmanCodebook", O_WRONLY | O_APPEND | O_CREAT,00600);
+    if (wfd < 0)
+    {
+        printf("Error, could not create a new file named HuffmanCodebook in this directory.\n");
+        close(wfd);
+        return;
+    }
+	char* arr = myMalloc(1000*sizeof(char)); //max tree height
+	int top = 0; 
+	get_huffmancode(root, arr, top, wfd);
+	close(wfd);
 }
 
 void free_minheap(minheap* minheap)
@@ -682,10 +706,9 @@ int main(int argc, char** argv)
 	{
 		minheap* minheap = build_minheap(path);
 		node* root = build_huffmantree(minheap);
-		free_minheap(minheap);		
-		int arr[numEntries], top = 0;
-		get_huffmancodebook(root, arr, top);
-		//freeNode(root);
+		free_minheap(minheap);
+		create_huffmancodebook(root);
+		//freeNode(root);	
 	}
     return 0;
 }
