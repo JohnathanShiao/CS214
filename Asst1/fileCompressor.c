@@ -673,7 +673,7 @@ int main(int argc, char** argv)
 		node* root = build_huffmantree(minheap);		
 		int arr[numEntries], top = 0;
 		get_huffmancodebook(root, arr, top);
-		//freeNode(root);
+		//freeNode(root); caused error?
 	}
     return 0;
 }
