@@ -490,7 +490,7 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-minheap* build_minheap(char* file){
+LLNode** build_hashtable(char* file){
 	int fd = open(file, O_RDONLY);
     if(fd < 0)
     {
@@ -574,11 +574,9 @@ minheap* build_minheap(char* file){
 		close(fd);
 		exit(0);
 	}
-	minheap* minheap = create_minheap(hash_table);
-	free_hash(hash_table);
-	free(hash_table);
 	close(fd);
-	return minheap;
+	return hash_table;
+
 }
 
 node* extract_min(minheap* minheap)
@@ -621,18 +619,18 @@ node* build_huffmantree(minheap* minheap)
 	return extract_min(minheap);
 }
 
-void get_huffmancode(node* root, char* arr, int top, int wfd)
+void get_huffmancode(node* root, char* arr, int top, int wfd, char* escapeChar)
 {
 	char* c = myMalloc(sizeof(char));
 	if(root->left)
 	{
 		arr[top] = '0';
-		get_huffmancode(root->left, arr, top+1, wfd);
+		get_huffmancode(root->left, arr, top+1, wfd, escapeChar);
 	}
 	if(root->right)
 	{
 		arr[top] = '1';
-		get_huffmancode(root->right, arr, top+1, wfd);
+		get_huffmancode(root->right, arr, top+1, wfd, escapeChar);
 	}
 	if((!(root->left)) && (!(root->right)))
 	{
@@ -644,15 +642,32 @@ void get_huffmancode(node* root, char* arr, int top, int wfd)
 		}
 		*c = '\t';
 		write(wfd, c, 1);
-		write(wfd, root->data, strlen(root->data));
+		if(strcmp(root->data, "_SPACE_") == 0)
+		{
+			*c = ' ';			
+			write(wfd, c, 1);
+		}else if(strcmp(root->data, "_TAB_") == 0)
+		{
+			write(wfd, escapeChar, strlen(escapeChar));
+			*c = 't';
+			write(wfd, c, 1); 
+		}else if(strcmp(root->data, "_NEWLINE_") == 0)
+		{
+			write(wfd, escapeChar, strlen(escapeChar));
+			*c = 'n';
+			write(wfd, c, 1); 
+		}else
+			write(wfd, root->data, strlen(root->data));
+		
 		*c = '\n';
 		write(wfd, c, 1);
 	}
 	free(c);
 }
 
-void create_huffmancodebook(node* root)
+void create_huffmancodebook(node* root, char* escapeChar)
 {
+	remove("HuffmanCodebook"); //to override previous HuffmanCodebook if it exists already
 	int wfd = open("HuffmanCodebook", O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
     {
@@ -662,7 +677,11 @@ void create_huffmancodebook(node* root)
     }
 	char* arr = myMalloc(1000*sizeof(char)); //max tree height
 	int top = 0; 
-	get_huffmancode(root, arr, top, wfd);
+	char* c = myMalloc(sizeof(char));
+	*c = '\n';
+	write(wfd, escapeChar, strlen(escapeChar));
+	write(wfd, c, 1);
+	get_huffmancode(root, arr, top, wfd, escapeChar);
 	close(wfd);
 }
 
@@ -674,6 +693,39 @@ void free_minheap(minheap* minheap)
 		freeNode(minheap->array[i]);
 	}
 	free(minheap);
+}
+
+char* genEscape(LLNode** hash_table)
+{
+	char* escape = myMalloc(sizeof(char));
+	char* newescape;
+	*escape = '~';
+	int found = 0;
+	int i;
+	for(i = 0; i < 20; i++) 
+	{
+		LLNode* temp = hash_table[i];
+		while(temp != NULL)
+		{
+			LLNode* temp2 = temp;
+			if(strcmp(escape, temp2->data) == 0){
+				found = 1;
+			}
+			temp = temp->next;
+		}
+		if(found)
+		{
+			newescape = myMalloc(sizeof(escape)+1);
+			memcpy(newescape, escape, sizeof(escape));
+			newescape[sizeof(newescape)-1] = '`';
+			free(escape);	
+			found = 0;
+		}	
+		escape = myMalloc(sizeof(newescape));
+		escape = newescape;
+	}
+
+	return newescape;
 }
 
 int main(int argc, char** argv)
@@ -688,7 +740,8 @@ int main(int argc, char** argv)
    		recursive = 1;//then should be ./fileCompressor  -R -b/-c/-d path
 		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
 		{
-			//first step is to build a codebook from all files
+			//step 1: recursively build a codebook
+			//LLNode** hash_table = recursive_build(); TO BE MADE STILL
 		}else
 		{
 			printf("Error, %s is not an valid flag.\n", argv[2]);
@@ -714,10 +767,15 @@ int main(int argc, char** argv)
     	    freeNode(root);
    		}else if(strcmp(flag, "-b") == 0)
 		{
-			minheap* minheap = build_minheap(file);
+			LLNode** hash_table = build_hashtable(file);
+			char* escapeChar = genEscape(hash_table);
+			minheap* minheap = create_minheap(hash_table);
+			free_hash(hash_table);
+			free(hash_table);
 			node* root = build_huffmantree(minheap);
 			free_minheap(minheap);
-			create_huffmancodebook(root);
+			create_huffmancodebook(root, escapeChar);
+			free(escapeChar);
 			//freeNode(root);	
 		}else
 			printf("Error, %s is not an valid flag.\n", flag);
