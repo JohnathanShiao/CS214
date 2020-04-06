@@ -15,17 +15,12 @@ typedef struct node
     struct node* right;
 }node;
 
-typedef struct LLNode{
+typedef struct LLNode
+{
 	char* data;
 	int freq;
 	struct LLNode* next;
 }LLNode;
-
-typedef struct list
-{
-    char* data;
-    struct list* next;
-}list;
 
 typedef struct minheap
 {
@@ -65,17 +60,17 @@ void freeNode(node* root)
     free(root);
 }
 
-list* initList()
+LLNode* initList()
 {
-    list* temp = myMalloc(sizeof(list));
+    LLNode* temp = myMalloc(sizeof(LLNode));
     temp->next = NULL;
     temp->data = NULL;
     return temp;
 }
 
-void freeList(list* head)
+void freeList(LLNode* head)
 {
-    list* temp;
+    LLNode* temp;
     while(head!=NULL)
     {
         temp = head;
@@ -86,10 +81,10 @@ void freeList(list* head)
     }
 }
 
-list* insert(list* head, list* temp)
+LLNode* insert(LLNode* head, LLNode* temp)
 {
-    list* curr = head;
-    list* prev = NULL;
+    LLNode* curr = head;
+    LLNode* prev = NULL;
     while(curr != NULL)
     {
         prev = curr;
@@ -102,7 +97,7 @@ list* insert(list* head, list* temp)
     return head;
 }
 
-list* addToToken(list* head,list* word)
+LLNode* addToToken(LLNode* head,LLNode* word)
 {
     char* w = myMalloc(length * sizeof(char));
     int i;
@@ -111,7 +106,7 @@ list* addToToken(list* head,list* word)
         w[i] = *word->data;
         word = word->next;
     }
-    list* temp = initList();
+    LLNode* temp = initList();
     temp->data = w;
     head = insert(head,temp);
     return head;
@@ -145,22 +140,15 @@ void decompress(node* root, char* file)
         {
             ptr = ptr->left;
             if(ptr->data != NULL)
-            {
                 write(wfd,ptr->data,strlen(ptr->data));
-                ptr = root;
-            }
         }
         else if (*c == '1')
         {
             ptr = ptr->right;
             if(ptr->data != NULL)
-            {
                 write(wfd,ptr->data,strlen(ptr->data));
-                ptr = root;
-            }
         }
-        else
-            ptr = root;
+        ptr = root;
     }
     free(c);
     free(fileName);
@@ -179,11 +167,11 @@ int isControl(char* temp,char* escape)
     return 1;
 }
 
-node* genTree(list* head,char* escape)
+node* genTree(LLNode* head,char* escape)
 {
     node* root = initNode();
     node* temp = root;
-    list* ptr = head;
+    LLNode* ptr = head;
     int count = 0;
     while(ptr!=NULL)
     {
@@ -196,7 +184,7 @@ node* genTree(list* head,char* escape)
         return NULL;
     }
     ptr = head->next;
-    list* prev = head;
+    LLNode* prev = head;
     int i = 0;
     while(ptr != NULL && prev != NULL)
     {
@@ -252,9 +240,9 @@ node* loadBook(char* file)
         return NULL;
     }
     char* c = myMalloc(sizeof(char));
-    list* head = NULL;                  //linked list of chars to create a token
-    list* temp;
-    list* token = NULL;                  //linked list of tokens from file
+    LLNode* head = NULL;                  //linked list of chars to create a token
+    LLNode* temp;
+    LLNode* token = NULL;                  //linked list of tokens from file
     length = 0;
     while(read(fd,c,1) > 0)
     {
@@ -337,9 +325,9 @@ void compress(char* path, node* root)
     char* c = myMalloc(sizeof(char));
     char* code = myMalloc(8);
     node* ptr = root;
-    list* token = NULL;
-    list* temp;
-    list* head = NULL;
+    LLNode* token = NULL;
+    LLNode* temp;
+    LLNode* head = NULL;
     while(read(fd,c,1) > 0)
     {
        if(*c != '\n' && *c != '\t' && *c != ' ')
@@ -406,15 +394,7 @@ void free_hash(LLNode** hash_table)
 {
 	int i;
 	for(i = 0; i < 20; i++) 
-	{
-		LLNode* temp = hash_table[i];
-		while(temp != NULL)
-		{
-			LLNode* temp2 = temp;
-			temp = temp->next;
-			free(temp2);
-		}	
-	}
+		freeList(hash_table[i]);
 }
 
 void swap(node** n1, node**n2)
@@ -481,7 +461,7 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 			return hash_table;
 		}
 	}
-	LLNode* temp = malloc(sizeof(LLNode));
+	LLNode* temp = initList();
 	temp->data = string;
 	temp->freq = 1;
 	temp->next = hash_table[bucket]; 
@@ -500,8 +480,8 @@ LLNode** build_hashtable(char* file){
     }
 	LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
 	char* c = myMalloc(sizeof(char)); 
-	list* token = NULL;
-	list* temp;
+	LLNode* token = NULL;
+	LLNode* temp;
 	int length = 0;
 	int ascii_value = 0;
 	while(read(fd, c, 1) > 0)
@@ -513,7 +493,8 @@ LLNode** build_hashtable(char* file){
 			temp->data = myMalloc(sizeof(char));
 			memcpy(temp->data, c, 1);
 			token = insert(token, temp);
-		}else
+		}
+        else
 		{
 			if(length != 0)
 			{
@@ -523,7 +504,7 @@ LLNode** build_hashtable(char* file){
 				{
 					str[i] = *token->data;
 					ascii_value += (int)str[i];
-					token = token -> next;
+					token = token->next;
 				}
 				hash_table = insert_hash(hash_table, str, ascii_value);
 				length = 0;
@@ -533,11 +514,13 @@ LLNode** build_hashtable(char* file){
 				{
 					delim = myMalloc(7*sizeof(char));
 					delim = "_SPACE_";
-				}else if(*c == '\n')
+				}
+                else if(*c == '\n')
 				{
 					delim = myMalloc(9*sizeof(char));
 					delim = "_NEWLINE_";
-				}else{
+				}
+                else{
 					delim = myMalloc(5*sizeof(char));
 					delim = "_TAB_";
 				}
@@ -545,18 +528,21 @@ LLNode** build_hashtable(char* file){
 				delim = NULL;
 				freeList(token);
 				freeList(temp);
-			}else
+			}
+            else
 			{
 				char* delim;
 				if(*c == ' ')
 				{
 					delim = myMalloc(7*sizeof(char));
 					delim = "_SPACE_";
-				}else if(*c == '\n')
+				}
+                else if(*c == '\n')
 				{
 					delim = myMalloc(9*sizeof(char));
 					delim = "_NEWLINE_";
-				}else{
+				}
+                else{
 					delim = myMalloc(5*sizeof(char));
 					delim = "_TAB_";
 				}
@@ -568,7 +554,6 @@ LLNode** build_hashtable(char* file){
 	free(c);
 	close(fd);
 	return hash_table;
-
 }
 
 node* extract_min(minheap* minheap)
@@ -602,7 +587,6 @@ node* build_huffmantree(minheap* minheap)
 		left = extract_min(minheap);
 		right = extract_min(minheap);
 		top = initNode();
-		top->data = "added";
 		top->count = (left->count)+(right->count);
 		top->left = left;
 		top->right = right;
@@ -638,17 +622,20 @@ void get_huffmancode(node* root, char* arr, int top, int wfd, char* escapeChar)
 		{
 			*c = ' ';			
 			write(wfd, c, 1);
-		}else if(strcmp(root->data, "_TAB_") == 0)
+		}
+        else if(strcmp(root->data, "_TAB_") == 0)
 		{
 			write(wfd, escapeChar, strlen(escapeChar));
 			*c = 't';
 			write(wfd, c, 1); 
-		}else if(strcmp(root->data, "_NEWLINE_") == 0)
+		}
+        else if(strcmp(root->data, "_NEWLINE_") == 0)
 		{
 			write(wfd, escapeChar, strlen(escapeChar));
 			*c = 'n';
 			write(wfd, c, 1); 
-		}else
+		}
+        else
 			write(wfd, root->data, strlen(root->data));
 		
 		*c = '\n';
@@ -692,7 +679,6 @@ char* genEscape(LLNode** hash_table)
 	char* escape = myMalloc(sizeof(char));
 	*escape = '~';
 	int found;
-
 		do{
 			found = 0;
 			int ascii_value = 0;
@@ -704,10 +690,9 @@ char* genEscape(LLNode** hash_table)
 			char* test = myMalloc((strlen(escape)+1)*sizeof(char));
 			int bucket_tab = ascii_tab % 20;
 			int bucket_line = ascii_line % 20;
-			
 			LLNode* temp;
 			memcpy(test, escape, strlen(escape));
-			test[strlen(escape)] = 't';
+			test[strlen(escape)] = 't'; 
 			for(temp = hash_table[bucket_tab]; temp != NULL; temp = temp->next)
 			{
 				if(strcmp(temp->data, test) == 0)
@@ -739,30 +724,31 @@ char* genEscape(LLNode** hash_table)
 			}
 
 		}while(found == 1);
-
 	return escape;
 }
 
 int main(int argc, char** argv)
 {
-    if(argc < 3 || argc > 4)
+    if(argc < 3 || argc > 5)
     {
-        printf("Error: Expected 3-4 arguments, received %d\n",argc);
+        printf("Error: Expected 3-5 arguments, received %d\n",argc);
         return 0;
     }
     if(strcmp(argv[1], "-R") == 0)
 	{    
-   		recursive = 1;//then should be ./fileCompressor  -R -b/-c/-d path
+   		recursive = 1;  //then should be ./fileCompressor  -R -b/-c/-d path
 		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
 		{
 			//step 1: recursively build a codebook
 			//LLNode** hash_table = recursive_build(); TO BE MADE STILL
-		}else
+		}
+        else
 		{
 			printf("Error, %s is not an valid flag.\n", argv[2]);
-			exit(0);
+			exit(1);
 		}
-	}else
+	}
+    else
 	{
         recursive = 0;	//then should be ./fileCompressor -b/-c/-d file |codebook|
     	char* flag = argv[1]; 
@@ -780,7 +766,8 @@ int main(int argc, char** argv)
     	    node* root = loadBook(book);
     	    compress(file,root);
     	    freeNode(root);
-   		}else if(strcmp(flag, "-b") == 0)
+   		}
+        else if(strcmp(flag, "-b") == 0)
 		{
 			LLNode** hash_table = build_hashtable(file);
 			if(numEntries == 0)
@@ -788,7 +775,7 @@ int main(int argc, char** argv)
 				printf("Error, file is empty. Cannot build Huffman Codebook.\n");
 				free_hash(hash_table);
 				free(hash_table);
-				exit(0);
+				exit(1);
 			}
 			char* escapeChar = genEscape(hash_table);
 			minheap* minheap = create_minheap(hash_table);
@@ -799,10 +786,12 @@ int main(int argc, char** argv)
 			create_huffmancodebook(root, escapeChar);
 			free(escapeChar);
 			//freeNode(root);	
-		}else
+		}
+        else
+        {
 			printf("Error, %s is not an valid flag.\n", flag);
-			exit(0);
+			exit(1);
+        }
 	}
-	
     return 0;
 }
