@@ -81,6 +81,17 @@ void freeList(LLNode* head)
     }
 }
 
+int height(node* root)
+{
+    if(root==NULL)
+        return 0;
+    int leftHeight = height(root->left);
+    int rightHeight = height(root->right);
+    if(leftHeight > rightHeight)
+        return leftHeight+1;
+    return rightHeight+1;
+}
+
 LLNode* insert(LLNode* head, LLNode* temp)
 {
     LLNode* curr = head;
@@ -140,15 +151,25 @@ void decompress(node* root, char* file)
         {
             ptr = ptr->left;
             if(ptr->data != NULL)
+            {
                 write(wfd,ptr->data,strlen(ptr->data));
+                ptr = root;
+            }
         }
         else if (*c == '1')
         {
             ptr = ptr->right;
             if(ptr->data != NULL)
+            {
                 write(wfd,ptr->data,strlen(ptr->data));
+                ptr = root;
+            }
         }
-        ptr = root;
+        else
+        {
+            if(ptr == NULL)
+                ptr = root;
+        }
     }
     free(c);
     free(fileName);
@@ -180,8 +201,8 @@ node* genTree(LLNode* head,char* escape)
     }
     if(count%2!=0)
     {
-        printf("Error: Key value pairs are improperly formatted, aborting.\n");
-        return NULL;
+        printf("Error: Codebook is improperly formatted, or loaded poorly, aborting.\n");
+        exit(1);
     }
     ptr = head->next;
     LLNode* prev = head;
@@ -235,9 +256,9 @@ node* loadBook(char* file)
     int fd = open(file, O_RDONLY);
     if(fd<0)
     {
-        printf("Could not find the codebook %s in this directory.\n",file);
+        printf("Could not find the codebook %s in this directory, Aborting.\n",file);
         close(fd);
-        return NULL;
+        exit(1);
     }
     char* c = myMalloc(sizeof(char));
     LLNode* head = NULL;                  //linked list of chars to create a token
@@ -267,13 +288,13 @@ node* loadBook(char* file)
     }
     if(token == NULL)
     {
-        printf("Error: codebook is empty, unable to decompress.\n");
+        printf("Error: Codebook is empty, unable to continue. Aborting.\n");
         close(fd);
-        return NULL;
+        exit(1);
     }
     free(c);
     close(fd);
-    char* escape = myMalloc(32);
+    char* escape = myMalloc(strlen(token->data)+1);
     memcpy(escape,token->data,strlen(token->data)+1);
     temp = token;
     token = token->next;
@@ -323,7 +344,7 @@ void compress(char* path, node* root)
         return;
     }
     char* c = myMalloc(sizeof(char));
-    char* code = myMalloc(8);
+    char* code = myMalloc(height(root));
     node* ptr = root;
     LLNode* token = NULL;
     LLNode* temp;
@@ -351,7 +372,7 @@ void compress(char* path, node* root)
                 }
                 write(wfd,code,strlen(code));
                 free(code);
-                code = myMalloc(8);
+                code = myMalloc(height(root));
                 length=0;
                 freeList(head);
                 freeList(token);
@@ -368,20 +389,23 @@ void compress(char* path, node* root)
                 }
                 write(wfd,code,strlen(code));
                 free(code);
-                code = myMalloc(8);
+                code = myMalloc(height(root));
+                length = 0;
             }
         }
     }
     if(length > 0)
-        token = addToToken(token,head);
-    freeList(head);
-    encode(token->data,root,code,0);
-    if(strlen(code) == 0)
     {
-        printf("Error, something does not exist in the codebook, Aborting.\n");
-        exit(1);
+        token = addToToken(token,head);
+        encode(token->data,root,code,0);
+        if(strlen(code) == 0)
+        {
+            printf("Error, something does not exist in the codebook, Aborting.\n");
+            exit(1);
+        }
+        write(wfd,code,strlen(code));
     }
-    write(wfd,code,strlen(code));
+    freeList(head);
     free(code);
     freeList(token);
     free(c);
@@ -455,7 +479,8 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 {
 	int bucket = ascii_value % 20; 
 	LLNode* ptr;
-	for(ptr = hash_table[bucket]; ptr != NULL; ptr = ptr->next){
+	for(ptr = hash_table[bucket]; ptr != NULL; ptr = ptr->next)
+    {
 		if(strcmp(ptr->data, string) == 0){
 			ptr->freq += 1;
 			return hash_table;
@@ -509,28 +534,10 @@ LLNode** build_hashtable(char* file){
 				hash_table = insert_hash(hash_table, str, ascii_value);
 				length = 0;
 				ascii_value = 0;
-				char* delim;
-				if(*c == ' ')
-				{
-					delim = myMalloc(7*sizeof(char));
-					delim = "_SPACE_";
-				}
-                else if(*c == '\n')
-				{
-					delim = myMalloc(9*sizeof(char));
-					delim = "_NEWLINE_";
-				}
-                else{
-					delim = myMalloc(5*sizeof(char));
-					delim = "_TAB_";
-				}
-				hash_table = insert_hash(hash_table , delim, (int)(*delim));
-				delim = NULL;
 				freeList(token);
-				freeList(temp);
 			}
-            else
-			{
+            if(*c == ' ' || *c == '\n' || *c == '\t')
+            {
 				char* delim;
 				if(*c == ' ')
 				{
@@ -542,7 +549,8 @@ LLNode** build_hashtable(char* file){
 					delim = myMalloc(9*sizeof(char));
 					delim = "_NEWLINE_";
 				}
-                else{
+                else
+                {
 					delim = myMalloc(5*sizeof(char));
 					delim = "_TAB_";
 				}
@@ -636,8 +644,7 @@ void get_huffmancode(node* root, char* arr, int top, int wfd, char* escapeChar)
 			write(wfd, c, 1); 
 		}
         else
-			write(wfd, root->data, strlen(root->data));
-		
+			write(wfd, root->data, strlen(root->data));	
 		*c = '\n';
 		write(wfd, c, 1);
 	}
@@ -668,9 +675,7 @@ void free_minheap(minheap* minheap)
 {	
 	int i;
 	for(i = 0; i < minheap->size; i++)
-	{
 		freeNode(minheap->array[i]);
-	}
 	free(minheap);
 }
 
