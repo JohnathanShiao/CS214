@@ -3,9 +3,23 @@ ml1417
 
 We tested each individual part of this program before we combined them, making sure to
 include edge cases and testing out the warning and error messages that are within.
+
 For decompress, we borrowed the tree from the example and manually wrote some bitstrings.
 We would have an example text document that we would then run diff on to make sure that
 all the characters were exactly the same, as well as all the delimiters were working properly.
+
 For encoding, it was harder to test, because the only way you could do so was to decode
 and hope that it was the same as when you started. If there was any error, it could have been either
 decode or encode that had the issue.
+
+For build, each part of the algorithm was tested in isolation. First, the task was to be able to tokenize a file 
+and insert unique tokens into the hash table or increment an existing token's frequency. To test this, files of 
+various sizes were created with varing amounts of unique or repeating tokens, and we recorded the frequencies of 
+each token and checked if they matched to those that were on the hash table. Particularly, we focuses on 
+recording the delimiters and tokens that had punctation attached. Examples include "hello!" or a new line 
+represented by '\n' when read from the file. Once testing the hash table was successful, we had to create a 
+minheap and binary tree from the tokens. This was tested mainly through comparing the results of the return of 
+the function with a calcuated expectation. However, the main test was to ultimately create the actual huffman 
+code based on the binary tree. To do this, we created various files to test if the resulting codes were correct 
+in correlation with an online huffman code tool. With this, we began will small files with 2-3 unique tokens and then increased the size. We also eventually tested when files that contained all types of tokens such as "erhu3&", "!ndeio%s", "\n" (not a delimiter), etc.
+For recursive, 
