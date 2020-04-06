@@ -179,13 +179,15 @@ void decompress(node* root, char* file)
 
 int isControl(char* temp,char* escape)
 {
-    int i = 0;
-    for(i;i<strlen(escape);i++)
-    {
-        if(temp[i] != escape[i])
-            return 0;
-    }
-    return 1;
+    char* control = myMalloc(strlen(escape)+1);
+    memcpy(control,escape,strlen(escape));
+    control[strlen(escape)] = 't';
+    if(strcmp(temp,control)==0)
+        return 1;
+    control[strlen(escape)] = 'n';
+    if(strcmp(temp,control)==0)
+        return 1;
+    return 0;
 }
 
 node* genTree(LLNode* head,char* escape)
@@ -198,6 +200,11 @@ node* genTree(LLNode* head,char* escape)
     {
         ptr=ptr->next;
         count++;
+    }
+    if(count == 0)
+    {
+        printf("Error: Codebook is empty. Aborting.\n");
+        exit(1);
     }
     if(count%2!=0)
     {
@@ -459,8 +466,9 @@ minheap* create_minheap(LLNode** hash_table)
 		LLNode* temp = hash_table[i];
 		while(temp != NULL)
 		{
-			minheap->array[j] = initNode();
-			minheap->array[j]->data = temp->data;
+            minheap->array[j] = initNode();
+            minheap->array[j]->data = myMalloc(strlen(temp->data));
+            memcpy(minheap->array[j]->data,temp->data,strlen(temp->data));
 			minheap->array[j]->count = temp->freq;
 			j++;
 			temp = temp->next;
@@ -542,17 +550,17 @@ LLNode** build_hashtable(char* file){
 				if(*c == ' ')
 				{
 					delim = myMalloc(7*sizeof(char));
-					delim = "_SPACE_";
+                    memcpy(delim,"_SPACE_",7);
 				}
                 else if(*c == '\n')
 				{
 					delim = myMalloc(9*sizeof(char));
-					delim = "_NEWLINE_";
+                    memcpy(delim,"_NEWLINE_",9);
 				}
                 else
                 {
 					delim = myMalloc(5*sizeof(char));
-					delim = "_TAB_";
+                    memcpy(delim,"_TAB_",5);
 				}
 				hash_table = insert_hash(hash_table , delim, (int)(*delim));
 				delim = NULL;			
@@ -661,7 +669,7 @@ void create_huffmancodebook(node* root, char* escapeChar)
         close(wfd);
         return;
     }
-	char* arr = myMalloc(1000*sizeof(char)); //max tree height
+	char* arr = myMalloc(height(root)); //max tree height
 	int top = 0; 
 	char* c = myMalloc(sizeof(char));
 	*c = '\n';
