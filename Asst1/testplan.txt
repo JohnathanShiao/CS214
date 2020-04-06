@@ -22,4 +22,7 @@ minheap and binary tree from the tokens. This was tested mainly through comparin
 the function with a calcuated expectation. However, the main test was to ultimately create the actual huffman 
 code based on the binary tree. To do this, we created various files to test if the resulting codes were correct 
 in correlation with an online huffman code tool. With this, we began will small files with 2-3 unique tokens and then increased the size. We also eventually tested when files that contained all types of tokens such as "erhu3&", "!ndeio%s", "\n" (not a delimiter), etc.
+In addition, there was an extentsive amount of testing finding a unique escape character. That is, we made 
+test.txt files that contained "\n", "~t", "~n", etc. along with actual delimiters that would be represented as
+' ', <generated escape>t, and <generate escape>n in the Huffman Codebook. 
 For recursive, 
