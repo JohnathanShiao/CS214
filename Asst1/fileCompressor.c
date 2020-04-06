@@ -515,7 +515,7 @@ LLNode** build_hashtable(char* file){
 	char* c = myMalloc(sizeof(char)); 
 	LLNode* token = NULL;
 	LLNode* temp;
-	int length = 0;
+	length=0;
 	int ascii_value = 0;
 	while(read(fd, c, 1) > 0)
 	{
@@ -567,8 +567,23 @@ LLNode** build_hashtable(char* file){
 			}
 		}
 	}
+    if(length > 0)
+    {
+        char* str = myMalloc(length * sizeof(char));
+        int i;
+        for(i = 0; i < length; i++)
+        {
+            str[i] = *token->data;
+            ascii_value += (int)str[i];
+            token = token->next;
+        }
+        hash_table = insert_hash(hash_table, str, ascii_value);
+        length = 0;
+        ascii_value = 0;
+        freeList(token);
+    }
 	free(c);
-	close(fd);
+	close(fd);  
 	return hash_table;
 }
 
@@ -608,6 +623,14 @@ node* build_huffmantree(minheap* minheap)
 		top->right = right;
 		insert_minheap(minheap, top);
 	}
+    if(minheap->size == 1)
+    {
+        left = extract_min(minheap);
+        top = initNode();
+        top->count = left->count;
+        top->left = left;
+        insert_minheap(minheap,top);
+    }
 	return extract_min(minheap);
 }
 
