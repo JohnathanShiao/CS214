@@ -566,14 +566,6 @@ LLNode** build_hashtable(char* file){
 		}
 	}
 	free(c);
-	if(numEntries == 0)
-	{
-		printf("Error, file is empty. Cannot build Huffman Codebook.\n");
-		free_hash(hash_table);
-		free(hash_table);
-		close(fd);
-		exit(0);
-	}
 	close(fd);
 	return hash_table;
 
@@ -698,34 +690,58 @@ void free_minheap(minheap* minheap)
 char* genEscape(LLNode** hash_table)
 {
 	char* escape = myMalloc(sizeof(char));
-	char* newescape;
 	*escape = '~';
-	int found = 0;
-	int i;
-	for(i = 0; i < 20; i++) 
-	{
-		LLNode* temp = hash_table[i];
-		while(temp != NULL)
-		{
-			LLNode* temp2 = temp;
-			if(strcmp(escape, temp2->data) == 0){
-				found = 1;
-			}
-			temp = temp->next;
-		}
-		if(found)
-		{
-			newescape = myMalloc(sizeof(escape)+1);
-			memcpy(newescape, escape, sizeof(escape));
-			newescape[sizeof(newescape)-1] = '`';
-			free(escape);	
-			found = 0;
-		}	
-		escape = myMalloc(sizeof(newescape));
-		escape = newescape;
-	}
+	int found;
 
-	return newescape;
+		do{
+			found = 0;
+			int ascii_value = 0;
+			int i;
+			for(i = 0; i < strlen(escape); i++)
+					ascii_value += (int)escape[i]; //get the ascii value of the escape char preceding t or n
+			int ascii_tab = ascii_value + (int)('t');
+			int ascii_line = ascii_value + (int)('n');
+			char* test = myMalloc((strlen(escape)+1)*sizeof(char));
+			printf("length of test is: %s\n", strlen(test));
+			int bucket_tab = ascii_tab % 20;
+			int bucket_line = ascii_line % 20;
+			
+			LLNode* temp;
+			memcpy(test, escape, strlen(escape));
+			test[strlen(escape)] = 't';
+			for(temp = hash_table[bucket_tab]; temp != NULL; temp = temp->next)
+			{
+				if(strcmp(temp->data, test) == 0)
+				{
+					found = 1;
+					char* newescape = myMalloc((strlen(escape)+1)*sizeof(char));
+					memcpy(newescape, escape, strlen(escape));
+					newescape[strlen(escape)] = '`';
+					free(escape);
+					char* escape = myMalloc(strlen(newescape)*sizeof(char));
+					memcpy(escape, newescape, strlen(newescape));
+					free(newescape);
+				}
+			}
+			test[strlen(escape)] = 'n';
+			for(temp = hash_table[bucket_line]; temp != NULL; temp = temp->next)
+			{
+				if(strcmp(temp->data, test) == 0)
+				{
+					found = 1;
+					char* newescape = myMalloc((strlen(escape)+1)*sizeof(char));
+					memcpy(newescape, escape, strlen(escape));
+					newescape[strlen(escape)] = '`';
+					free(escape);
+					char* escape = myMalloc(strlen(newescape)*sizeof(char));
+					memcpy(escape, newescape, strlen(newescape));
+					free(newescape);
+				}
+			}
+
+		}while(found == 1);
+
+	return escape;
 }
 
 int main(int argc, char** argv)
@@ -768,6 +784,13 @@ int main(int argc, char** argv)
    		}else if(strcmp(flag, "-b") == 0)
 		{
 			LLNode** hash_table = build_hashtable(file);
+			if(numEntries == 0)
+			{
+				printf("Error, file is empty. Cannot build Huffman Codebook.\n");
+				free_hash(hash_table);
+				free(hash_table);
+				exit(0);
+			}
 			char* escapeChar = genEscape(hash_table);
 			minheap* minheap = create_minheap(hash_table);
 			free_hash(hash_table);
