@@ -702,7 +702,6 @@ char* genEscape(LLNode** hash_table)
 			int ascii_tab = ascii_value + (int)('t');
 			int ascii_line = ascii_value + (int)('n');
 			char* test = myMalloc((strlen(escape)+1)*sizeof(char));
-			printf("length of test is: %s\n", strlen(test));
 			int bucket_tab = ascii_tab % 20;
 			int bucket_line = ascii_line % 20;
 			
