@@ -44,3 +44,4 @@ based the two actions off of the the Huffman Code from build, we dispersed token
 then kept in mind the Huffman Codes created by build and compared if the encoding or decoding were correct. To 
 do this, we ran our files to be compressed through the normal, nonrecursive compress file by file to have a 
 counterpart and vice versa for the file to be decompressed.	
+
