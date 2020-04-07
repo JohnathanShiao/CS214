@@ -45,4 +45,3 @@ NOTES
     Please note that the only delimiters that are considered are the space, newline, and tab. Any other character attached to a word, such as punctuation
     will be considered a separate unique token, meaning that 'happy' and 'happy!' will be different tokens in the tree.
     This program will not accept more than one parameter for file or path, please indicate '-R' as the first flag in order to run on a directory
-    
