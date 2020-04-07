@@ -2,8 +2,6 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
-#include <dirent.h>
-#include <sys/types.h>
 
 int length;
 int recursive;
@@ -181,13 +179,15 @@ void decompress(node* root, char* file)
 
 int isControl(char* temp,char* escape)
 {
-    int i = 0;
-    for(i;i<strlen(escape);i++)
-    {
-        if(temp[i] != escape[i])
-            return 0;
-    }
-    return 1;
+    char* control = myMalloc(strlen(escape)+1);
+    memcpy(control,escape,strlen(escape));
+    control[strlen(escape)] = 't';
+    if(strcmp(temp,control)==0)
+        return 1;
+    control[strlen(escape)] = 'n';
+    if(strcmp(temp,control)==0)
+        return 1;
+    return 0;
 }
 
 node* genTree(LLNode* head,char* escape)
@@ -200,6 +200,11 @@ node* genTree(LLNode* head,char* escape)
     {
         ptr=ptr->next;
         count++;
+    }
+    if(count == 0)
+    {
+        printf("Error: Codebook is empty. Aborting.\n");
+        exit(1);
     }
     if(count%2!=0)
     {
@@ -461,8 +466,9 @@ minheap* create_minheap(LLNode** hash_table)
 		LLNode* temp = hash_table[i];
 		while(temp != NULL)
 		{
-			minheap->array[j] = initNode();
-			minheap->array[j]->data = temp->data;
+            minheap->array[j] = initNode();
+            minheap->array[j]->data = myMalloc(strlen(temp->data));
+            memcpy(minheap->array[j]->data,temp->data,strlen(temp->data));
 			minheap->array[j]->count = temp->freq;
 			j++;
 			temp = temp->next;
@@ -497,12 +503,19 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-LLNode** build_hashtable(int fd, LLNode** hash_table)
-{
+LLNode** build_hashtable(char* file){
+	int fd = open(file, O_RDONLY);
+    if(fd < 0)
+    {
+        printf("Could not find the codebook %s in this directory.\n",file);
+        close(fd);
+        return NULL;
+    }
+	LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
 	char* c = myMalloc(sizeof(char)); 
 	LLNode* token = NULL;
 	LLNode* temp;
-	int length = 0;
+	length=0;
 	int ascii_value = 0;
 	while(read(fd, c, 1) > 0)
 	{
@@ -537,25 +550,40 @@ LLNode** build_hashtable(int fd, LLNode** hash_table)
 				if(*c == ' ')
 				{
 					delim = myMalloc(7*sizeof(char));
-					delim = "_SPACE_";
+                    memcpy(delim,"_SPACE_",7);
 				}
                 else if(*c == '\n')
 				{
 					delim = myMalloc(9*sizeof(char));
-					delim = "_NEWLINE_";
+                    memcpy(delim,"_NEWLINE_",9);
 				}
                 else
                 {
 					delim = myMalloc(5*sizeof(char));
-					delim = "_TAB_";
+                    memcpy(delim,"_TAB_",5);
 				}
 				hash_table = insert_hash(hash_table , delim, (int)(*delim));
 				delim = NULL;			
 			}
 		}
 	}
+    if(length > 0)
+    {
+        char* str = myMalloc(length * sizeof(char));
+        int i;
+        for(i = 0; i < length; i++)
+        {
+            str[i] = *token->data;
+            ascii_value += (int)str[i];
+            token = token->next;
+        }
+        hash_table = insert_hash(hash_table, str, ascii_value);
+        length = 0;
+        ascii_value = 0;
+        freeList(token);
+    }
 	free(c);
-	close(fd);
+	close(fd);  
 	return hash_table;
 }
 
@@ -595,6 +623,14 @@ node* build_huffmantree(minheap* minheap)
 		top->right = right;
 		insert_minheap(minheap, top);
 	}
+    if(minheap->size == 1)
+    {
+        left = extract_min(minheap);
+        top = initNode();
+        top->count = left->count;
+        top->left = left;
+        insert_minheap(minheap,top);
+    }
 	return extract_min(minheap);
 }
 
@@ -656,7 +692,7 @@ void create_huffmancodebook(node* root, char* escapeChar)
         close(wfd);
         return;
     }
-	char* arr = myMalloc(1000*sizeof(char)); //max tree height
+	char* arr = myMalloc(height(root)); //max tree height
 	int top = 0; 
 	char* c = myMalloc(sizeof(char));
 	*c = '\n';
@@ -727,38 +763,6 @@ char* genEscape(LLNode** hash_table)
 	return escape;
 }
 
-
-LLNode** recursive_build(char* base_path, LLNode** hash_table)
-{
-    char curr_path[1000];
-    struct dirent *dp;
-    DIR *dir = opendir(base_path);
-
-    if (!dir)
-		return;
-
-    while ((dp = readdir(dir)) != NULL)
-    {
-        if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0)
-        {
-            printf("%s\n", dp->d_name);
-			int fd = open(dp->d_name, O_RDONLY);
-			hash_table = build_hashtable(fd, hash_table);
-			
-			
-            // Construct new path from our base path
-            strcpy(curr_path, base_path);
-            strcat(curr_path, "/");
-            strcat(curr_path, dp->d_name);
-
-            recursive_build(curr_path, hash_table);
-        }
-    }
-
-    closedir(dir);
-	return hash_table;
-}
-
 int main(int argc, char** argv)
 {
     if(argc < 3 || argc > 5)
@@ -772,18 +776,7 @@ int main(int argc, char** argv)
 		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
 		{
 			//step 1: recursively build a codebook
-			LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
-			hash_table = recursive_build(argv[3], hash_table);
-			char* escapeChar = genEscape(hash_table);
-			minheap* minheap = create_minheap(hash_table);
-			//free_hash(hash_table);
-			//free(hash_table);
-			node* root = build_huffmantree(minheap);
-			free_minheap(minheap);
-			create_huffmancodebook(root, escapeChar);
-			free(escapeChar);
-			//freeNode(root);	
-			
+			//LLNode** hash_table = recursive_build(); TO BE MADE STILL
 		}
         else
 		{
@@ -812,28 +805,18 @@ int main(int argc, char** argv)
    		}
         else if(strcmp(flag, "-b") == 0)
 		{
-			int fd = open(file, O_RDONLY);
-   			if(fd < 0)
-   			{
-        		printf("Could not find the file %s in this directory.\n",file);
-       		 	close(fd);
-    		}
-			else
-			{
-				LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
-				hash_table = build_hashtable(fd, hash_table);
-				if(numEntries == 0)
-					printf("Warning, file is empty. No Huffman code in codebook.\n");
-				char* escapeChar = genEscape(hash_table);
-				minheap* minheap = create_minheap(hash_table);
-				//free_hash(hash_table);
-				//free(hash_table);
-				node* root = build_huffmantree(minheap);
-				free_minheap(minheap);
-				create_huffmancodebook(root, escapeChar);
-				free(escapeChar);
-				//freeNode(root);	
-			}
+			LLNode** hash_table = build_hashtable(file);
+			if(numEntries == 0)
+				printf("Warning, file is empty.\n");
+			char* escapeChar = genEscape(hash_table);
+			minheap* minheap = create_minheap(hash_table);
+			free_hash(hash_table);
+			free(hash_table);
+			node* root = build_huffmantree(minheap);
+			free_minheap(minheap);
+			create_huffmancodebook(root, escapeChar);
+			free(escapeChar);
+			//freeNode(root);	
 		}
         else
         {
