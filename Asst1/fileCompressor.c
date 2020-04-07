@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <errno.h>
 
 int length;
-int recursive;
 int numEntries = 0;
 
 typedef struct node
@@ -125,7 +127,11 @@ LLNode* addToToken(LLNode* head,LLNode* word)
 
 void decompress(node* root, char* file)
 {
-    int fd = open(file,O_RDONLY);
+    int fd = -1;
+    if(strcmp((file+strlen(file)-4),".txt")!=0)
+        fd = open(file,O_RDONLY);
+    else
+        return;
     if (fd < 0)
     {
         printf("Error, could not find %s in this directory.\n",file);
@@ -135,6 +141,7 @@ void decompress(node* root, char* file)
     int len = strlen(file);
     char* fileName = myMalloc(len-4);
     memcpy(fileName,file,len-4);
+    remove(fileName);
     int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
     {
@@ -331,7 +338,11 @@ int encode(char* word, node* root, char* code,int i)
 
 void compress(char* path, node* root)
 {
-    int fd = open(path,O_RDONLY);
+    int fd = -1;
+    if(strcmp((path+strlen(path)-4),".hcz")!=0)
+        fd = open(path,O_RDONLY);
+    else
+        return;
     if (fd < 0)
     {
         printf("Error, could not find %s in this directory.\n",path);
@@ -342,6 +353,7 @@ void compress(char* path, node* root)
     char* fileName = myMalloc(len+4);
     memcpy(fileName,path,len);
     memcpy(fileName+len,".hcz",4);
+    remove(fileName);
     int wfd = open(fileName, O_WRONLY | O_APPEND | O_CREAT,00600);
     if (wfd < 0)
     {
@@ -503,7 +515,7 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-LLNode** build_hashtable(char* file){
+LLNode** build_hashtable(char* file, LLNode** hash_table){
 	int fd = open(file, O_RDONLY);
     if(fd < 0)
     {
@@ -511,7 +523,6 @@ LLNode** build_hashtable(char* file){
         close(fd);
         return NULL;
     }
-	LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
 	char* c = myMalloc(sizeof(char)); 
 	LLNode* token = NULL;
 	LLNode* temp;
@@ -613,6 +624,14 @@ node* build_huffmantree(minheap* minheap)
 	node* left;
 	node* right;
 	node* top;
+    if(minheap->size == 1)
+    {
+        left = extract_min(minheap);
+        top = initNode();
+        top->count = left->count;
+        top->left = left;
+        insert_minheap(minheap,top);
+    }
 	while(!(minheap->size == 1))
 	{
 		left = extract_min(minheap);
@@ -623,14 +642,6 @@ node* build_huffmantree(minheap* minheap)
 		top->right = right;
 		insert_minheap(minheap, top);
 	}
-    if(minheap->size == 1)
-    {
-        left = extract_min(minheap);
-        top = initNode();
-        top->count = left->count;
-        top->left = left;
-        insert_minheap(minheap,top);
-    }
 	return extract_min(minheap);
 }
 
@@ -763,6 +774,85 @@ char* genEscape(LLNode** hash_table)
 	return escape;
 }
 
+void decomp(char* file, char* book)
+{
+    node* root = loadBook(book);
+    decompress(root,file);
+    freeNode(root);
+}
+
+void comp(char* file, char* book)
+{
+    node* root = loadBook(book);
+    compress(file,root);
+    freeNode(root);
+}
+
+void build(char* file)
+{
+    LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
+    hash_table = build_hashtable(file,hash_table);
+    if(numEntries == 0)
+    {
+        printf("Error, file is empty. Cannot build Huffman Codebook.\n");
+        free_hash(hash_table);
+        free(hash_table);
+        exit(1);
+    }
+    char* escapeChar = genEscape(hash_table);
+    minheap* minheap = create_minheap(hash_table);
+    free_hash(hash_table);
+    free(hash_table);
+    node* root = build_huffmantree(minheap);
+    free_minheap(minheap);
+    create_huffmancodebook(root, escapeChar);
+    free(escapeChar);
+    freeNode(root);
+}
+
+void recurse(char* flag, char* file, char* book)
+{
+    struct dirent *dp;
+    DIR* dir = opendir(file);
+    if(!dir)
+    {
+        printf("Could not open %s, Aborting.\n",file);
+        exit(1);
+    }
+    dp = readdir(dir);       //Skip '.'
+    dp = readdir(dir);       //Skip '..'
+    dp = readdir(dir);      //read the first proper dirent
+    while(dp != NULL)
+    {
+        if(dp->d_type == 8)
+        {
+            char* tempPath = myMalloc(1024);
+            memcpy(tempPath,file,strlen(file));
+            strcat(tempPath,"/");
+            strcat(tempPath,dp->d_name);
+            if(strcmp(flag,"-b")==0)
+                build(tempPath);
+            else if(strcmp(flag,"-c")==0)
+                comp(tempPath,book);
+            else if(strcmp(flag,"-d")==0)
+                decomp(tempPath,book);
+            else
+            {
+                printf("%s is not a valid flag, Aborting.\n",flag);
+                exit(1);
+            }
+            free(tempPath);
+        }
+        else if(dp->d_type == 4)
+        {
+            strcat(file,"/");
+            strcat(file,dp->d_name);
+            recurse(flag,file,book);
+        }
+        dp = readdir(dir);
+    }
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 3 || argc > 5)
@@ -772,62 +862,60 @@ int main(int argc, char** argv)
     }
     if(strcmp(argv[1], "-R") == 0)
 	{    
-   		recursive = 1;  //then should be ./fileCompressor  -R -b/-c/-d path
-		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
-		{
-			//step 1: recursively build a codebook
-			//LLNode** hash_table = recursive_build(); TO BE MADE STILL
-		}
+        //then should be ./fileCompressor  -R -b/-c/-d path
+		char* flag = argv[2];
+        char* file = myMalloc(1024);
+        memcpy(file,argv[3],strlen(argv[3]));
+        char* book = argv[4];
+        struct dirent *dp;
+        DIR* dir = opendir(file);
+        if(!dir)    
+        {
+            printf("Error %d: Could not open %s, Aborting.\n",errno,file);
+            exit(1);
+        }
+        dp = readdir(dir);
+        if(dp->d_type == 8)
+        {
+            printf("Warning, you have called called for recursion on a file, this program will only execute on %s.\n",file);
+            if(strcmp(flag,"-b")==0)
+                build(file);
+            else if(strcmp(flag,"-c")==0)
+                comp(file,book);
+            else if(strcmp(flag,"-d")==0)
+                decomp(file,book);
+            else
+                printf("%s is not a valid flag, Aborting.\n",flag);
+        }
+        else if(dp->d_type == 4)
+            recurse(flag,file,book);
         else
-		{
-			printf("Error, %s is not an valid flag.\n", argv[2]);
-			exit(1);
-		}
+        {
+            closedir(dir);
+            printf("Error: Called recursion on unsupported filetype. Aborting.\n");
+            exit(1);
+        }
+        closedir(dir);
 	}
     else
 	{
-        recursive = 0;	//then should be ./fileCompressor -b/-c/-d file |codebook|
+        //then should be ./fileCompressor -b/-c/-d file |codebook|
     	char* flag = argv[1]; 
     	char* file = argv[2];
     	if(strcmp(flag,"-d") == 0)
     	{
-       		char* book = argv[3]; 
-       		node* root = loadBook(book);
-        	decompress(root,file);
-        	freeNode(root);
+            char* book = argv[3];
+       		decomp(file,book);
     	}
     	else if(strcmp(flag,"-c") == 0)
     	{
-    	    char* book = argv[3]; 
-    	    node* root = loadBook(book);
-    	    compress(file,root);
-    	    freeNode(root);
+    	    char* book = argv[3];
+            comp(file,book);
    		}
         else if(strcmp(flag, "-b") == 0)
-		{
-			LLNode** hash_table = build_hashtable(file);
-			if(numEntries == 0)
-			{
-				printf("Error, file is empty. Cannot build Huffman Codebook.\n");
-				free_hash(hash_table);
-				free(hash_table);
-				exit(1);
-			}
-			char* escapeChar = genEscape(hash_table);
-			minheap* minheap = create_minheap(hash_table);
-			free_hash(hash_table);
-			free(hash_table);
-			node* root = build_huffmantree(minheap);
-			free_minheap(minheap);
-			create_huffmancodebook(root, escapeChar);
-			free(escapeChar);
-			//freeNode(root);	
-		}
+            build(file);
         else
-        {
 			printf("Error, %s is not an valid flag.\n", flag);
-			exit(1);
-        }
 	}
     return 0;
 }
