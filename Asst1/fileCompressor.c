@@ -710,6 +710,8 @@ void create_huffmancodebook(node* root, char* escapeChar)
 	write(wfd, escapeChar, strlen(escapeChar));
 	write(wfd, c, 1);
 	get_huffmancode(root, arr, top, wfd, escapeChar);
+	free(arr);
+	free(c);
 	close(wfd);
 }
 
@@ -769,7 +771,7 @@ char* genEscape(LLNode** hash_table)
 					free(newescape);
 				}
 			}
-
+			free(test);
 		}while(found == 1);
 	return escape;
 }
