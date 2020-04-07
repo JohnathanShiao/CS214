@@ -24,6 +24,8 @@ typedef struct LLNode
 	struct LLNode* next;
 }LLNode;
 
+LLNode** rHash = NULL;
+
 typedef struct minheap
 {
 	int size;
@@ -515,7 +517,10 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-LLNode** build_hashtable(char* file, LLNode** hash_table){
+LLNode** build_hashtable(char* file, LLNode** hash_table)
+{
+    if(strcmp((file+strlen(file)-4),".hcz")==0)
+        return;
 	int fd = open(file, O_RDONLY);
     if(fd < 0)
     {
@@ -523,6 +528,8 @@ LLNode** build_hashtable(char* file, LLNode** hash_table){
         close(fd);
         return NULL;
     }
+    if(hash_table == NULL)
+        hash_table = myMalloc(20*sizeof(LLNode*));
 	char* c = myMalloc(sizeof(char)); 
 	LLNode* token = NULL;
 	LLNode* temp;
@@ -624,6 +631,11 @@ node* build_huffmantree(minheap* minheap)
 	node* left;
 	node* right;
 	node* top;
+    if(minheap->size == 0)
+    {
+        printf("Error, minheap is empty. Aborting.\n");
+        exit(1);
+    }
     if(minheap->size == 1)
     {
         left = extract_min(minheap);
@@ -788,17 +800,8 @@ void comp(char* file, char* book)
     freeNode(root);
 }
 
-void build(char* file)
+void writeBook(LLNode** hash_table)
 {
-    LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
-    hash_table = build_hashtable(file,hash_table);
-    if(numEntries == 0)
-    {
-        printf("Error, file is empty. Cannot build Huffman Codebook.\n");
-        free_hash(hash_table);
-        free(hash_table);
-        exit(1);
-    }
     char* escapeChar = genEscape(hash_table);
     minheap* minheap = create_minheap(hash_table);
     free_hash(hash_table);
@@ -808,6 +811,19 @@ void build(char* file)
     create_huffmancodebook(root, escapeChar);
     free(escapeChar);
     freeNode(root);
+}
+
+void build(char* file,LLNode** hash_table)
+{
+    hash_table = build_hashtable(file,hash_table);
+    if(numEntries == 0)
+    {
+        printf("Error, file is empty. Cannot build Huffman Codebook.\n");
+        free_hash(hash_table);
+        free(hash_table);
+        exit(1);
+    }
+    writeBook(hash_table);
 }
 
 void recurse(char* flag, char* file, char* book)
@@ -831,7 +847,7 @@ void recurse(char* flag, char* file, char* book)
             strcat(tempPath,"/");
             strcat(tempPath,dp->d_name);
             if(strcmp(flag,"-b")==0)
-                build(tempPath);
+                rHash = build_hashtable(tempPath,rHash);
             else if(strcmp(flag,"-c")==0)
                 comp(tempPath,book);
             else if(strcmp(flag,"-d")==0)
@@ -871,23 +887,11 @@ int main(int argc, char** argv)
         DIR* dir = opendir(file);
         if(!dir)    
         {
-            printf("Error %d: Could not open %s, Aborting.\n",errno,file);
+            printf("Error: Could not open %s. If this is a file, please run without the '-R' flag\n",file);
             exit(1);
         }
         dp = readdir(dir);
-        if(dp->d_type == 8)
-        {
-            printf("Warning, you have called called for recursion on a file, this program will only execute on %s.\n",file);
-            if(strcmp(flag,"-b")==0)
-                build(file);
-            else if(strcmp(flag,"-c")==0)
-                comp(file,book);
-            else if(strcmp(flag,"-d")==0)
-                decomp(file,book);
-            else
-                printf("%s is not a valid flag, Aborting.\n",flag);
-        }
-        else if(dp->d_type == 4)
+        if(dp->d_type == 4)
             recurse(flag,file,book);
         else
         {
@@ -896,6 +900,8 @@ int main(int argc, char** argv)
             exit(1);
         }
         closedir(dir);
+        if(rHash != NULL)
+            writeBook(rHash);
 	}
     else
 	{
@@ -913,7 +919,10 @@ int main(int argc, char** argv)
             comp(file,book);
    		}
         else if(strcmp(flag, "-b") == 0)
-            build(file);
+        {
+            LLNode** hash_table = NULL;
+            build(file, hash_table);
+        }
         else
 			printf("Error, %s is not an valid flag.\n", flag);
 	}
