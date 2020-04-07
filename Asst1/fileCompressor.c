@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/types.h>
 
 int length;
 int recursive;
@@ -495,15 +497,8 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 	return hash_table;
 }
 
-LLNode** build_hashtable(char* file){
-	int fd = open(file, O_RDONLY);
-    if(fd < 0)
-    {
-        printf("Could not find the codebook %s in this directory.\n",file);
-        close(fd);
-        return NULL;
-    }
-	LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
+LLNode** build_hashtable(int fd, LLNode** hash_table)
+{
 	char* c = myMalloc(sizeof(char)); 
 	LLNode* token = NULL;
 	LLNode* temp;
@@ -732,6 +727,38 @@ char* genEscape(LLNode** hash_table)
 	return escape;
 }
 
+
+LLNode** recursive_build(char* base_path, LLNode** hash_table)
+{
+    char curr_path[1000];
+    struct dirent *dp;
+    DIR *dir = opendir(base_path);
+
+    if (!dir)
+		return;
+
+    while ((dp = readdir(dir)) != NULL)
+    {
+        if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0)
+        {
+            printf("%s\n", dp->d_name);
+			int fd = open(dp->d_name, O_RDONLY);
+			hash_table = build_hashtable(fd, hash_table);
+			
+			
+            // Construct new path from our base path
+            strcpy(curr_path, base_path);
+            strcat(curr_path, "/");
+            strcat(curr_path, dp->d_name);
+
+            recursive_build(curr_path, hash_table);
+        }
+    }
+
+    closedir(dir);
+	return hash_table;
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 3 || argc > 5)
@@ -745,7 +772,18 @@ int main(int argc, char** argv)
 		if((strcmp(argv[2], "-b") == 0) || (strcmp(argv[2], "-c") == 0) || (strcmp(argv[2], "-d") == 0))
 		{
 			//step 1: recursively build a codebook
-			//LLNode** hash_table = recursive_build(); TO BE MADE STILL
+			LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
+			hash_table = recursive_build(argv[3], hash_table);
+			char* escapeChar = genEscape(hash_table);
+			minheap* minheap = create_minheap(hash_table);
+			//free_hash(hash_table);
+			//free(hash_table);
+			node* root = build_huffmantree(minheap);
+			free_minheap(minheap);
+			create_huffmancodebook(root, escapeChar);
+			free(escapeChar);
+			//freeNode(root);	
+			
 		}
         else
 		{
@@ -774,23 +812,28 @@ int main(int argc, char** argv)
    		}
         else if(strcmp(flag, "-b") == 0)
 		{
-			LLNode** hash_table = build_hashtable(file);
-			if(numEntries == 0)
+			int fd = open(file, O_RDONLY);
+   			if(fd < 0)
+   			{
+        		printf("Could not find the file %s in this directory.\n",file);
+       		 	close(fd);
+    		}
+			else
 			{
-				printf("Error, file is empty. Cannot build Huffman Codebook.\n");
-				free_hash(hash_table);
-				free(hash_table);
-				exit(1);
+				LLNode** hash_table = myMalloc(20*sizeof(LLNode*));
+				hash_table = build_hashtable(fd, hash_table);
+				if(numEntries == 0)
+					printf("Warning, file is empty. No Huffman code in codebook.\n");
+				char* escapeChar = genEscape(hash_table);
+				minheap* minheap = create_minheap(hash_table);
+				//free_hash(hash_table);
+				//free(hash_table);
+				node* root = build_huffmantree(minheap);
+				free_minheap(minheap);
+				create_huffmancodebook(root, escapeChar);
+				free(escapeChar);
+				//freeNode(root);	
 			}
-			char* escapeChar = genEscape(hash_table);
-			minheap* minheap = create_minheap(hash_table);
-			free_hash(hash_table);
-			free(hash_table);
-			node* root = build_huffmantree(minheap);
-			free_minheap(minheap);
-			create_huffmancodebook(root, escapeChar);
-			free(escapeChar);
-			//freeNode(root);	
 		}
         else
         {
