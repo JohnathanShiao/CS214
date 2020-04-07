@@ -25,4 +25,22 @@ in correlation with an online huffman code tool. With this, we began will small 
 In addition, there was an extentsive amount of testing finding a unique escape character. That is, we made 
 test.txt files that contained "\n", "~t", "~n", etc. along with actual delimiters that would be represented as
 ' ', <generated escape>t, and <generate escape>n in the Huffman Codebook. 
-For recursive, 
+
+Note: We tested the nonrecursive versions of compress, decompress, and build prior to writing and testing the recursive versions.
+
+For recursive, since we already had thoroughly tested the individual functions to build, compress, and decompress, so the main goal in testing recursive was the the traversal of the given path. We had to recursively
+apply the given operation to all the files found in the path. 
+1) First we tested the way in which we recursively traversed through the given path. The main way in 
+which we tested this was by printing all of the file names that were found in the the directory. To test this, 
+we created directories containing various amounts of subdirectories and files and ran the function in isolation. 
+2) Once we were confident with the recursive traversal through the path, the next step was to test the build 
+function. Since compress and decompress utilize the codebook from build, we tested this first to ensure it was 
+correct. We did this by distributing a known amount of tokens including the delimiters throughout a test 
+directory's files and within its subdirectories' files and so on with the subdirectories' files. Then, we ran 
+the recursive build flags and looked in the resulting HuffmanCodebook file to see if the huffman code and token 
+names (mainly delimiters with escape characters) matched what was expected. 
+3) Once build was successfully tested through numerous cases, we moved onto compress and decompress. Since we 
+based the two actions off of the the Huffman Code from build, we dispersed tokens thoroughout multiple files and 
+then kept in mind the Huffman Codes created by build and compared if the encoding or decoding were correct. To 
+do this, we ran our files to be compressed through the normal, nonrecursive compress file by file to have a 
+counterpart and vice versa for the file to be decompressed.	
