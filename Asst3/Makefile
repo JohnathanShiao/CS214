@@ -1,6 +1,6 @@
 all:
-	gcc client.c -o WTF
-	gcc server.c -o WTFserver
+	gcc -g client.c -o WTF
+	# gcc -g server.c -o WTFserver
 clean:
 	rm -rf WTF
-	rm -rf WTFserver
+	# rm -rf WTFserver
