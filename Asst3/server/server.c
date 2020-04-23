@@ -142,6 +142,70 @@ void serv_creat(int client_sock)
     }
 }
 
+int recurse_del(char* file)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(file);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    if(dp == NULL)
+        return 1;
+    char* temp;
+    while(dp!=NULL)
+    {
+        if(dp->d_type == 4)
+        {
+            temp = myMalloc(strlen(file)+256);
+            sprintf(temp,"%s/%s",file,dp->d_name);
+            if(recurse_del(temp))
+                remove(temp);
+            free(temp);
+        }
+        else if(dp->d_type == 8)
+        {
+            temp = myMalloc(strlen(file)+256);
+            sprintf(temp,"%s/%s",file,dp->d_name);
+            remove(temp);
+            free(temp);
+        }
+        dp = readdir(dir);
+    }
+    return 1;
+}
+
+void serv_del(int client_sock)
+{
+    //get size
+    char* c = myMalloc(1);
+    char* size = myMalloc(32);
+    int i = 0;
+    while(read(client_sock,c,1)>0 && *c != '~')
+        strcat(size,c);
+    //convert size to int
+    int siz = atoi(size);
+    if(siz <= 0)
+    {
+        printf("Something went wrong with delete.\n");
+        exit(1);
+    }
+    char* fileName = myMalloc(siz);
+    i=0;
+    for(i;i<siz;i++)
+    {
+        read(client_sock,c,1);
+        strcat(fileName,c);
+    }
+    if(fileLookup(fileName))
+    {
+        if(recurse_del(fileName))
+            remove(fileName);
+        write(client_sock,"1",1); 
+    }
+    else
+        write(client_sock,"0",1);
+}
+
 void handle_connection(int client_sock)
 {
     char* flag = myMalloc(3);
@@ -152,6 +216,8 @@ void handle_connection(int client_sock)
         strcat(flag,c);
     if(strcmp(flag,"CRT")==0)
         serv_creat(client_sock);
+    else if(strcmp(flag,"DEL")==0)
+        serv_del(client_sock);
     free(c);
 }
 

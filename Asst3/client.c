@@ -215,12 +215,28 @@ void client_creat(char* file,int sock)
     sprintf(buf,"CRT~%d~%s",strlen(file),file);
     write(sock,buf,strlen(buf));
     printf("Finished writing to socket\n");
-    sleep(1);
     read(sock,ans,1);
     if(atoi(ans) == 0)
         printf("Project %s was created.\n",file);
     else
         printf("The project alrady exists.\n");
+    return;
+}
+
+void client_del(char* file,int sock)
+{
+    //max message length
+    char* buf = myMalloc(300);
+    char* ans = myMalloc(1);
+    sprintf(buf,"DEL~%d~%s",strlen(file),file);
+    write(sock,buf,strlen(buf));
+    printf("Finished writing to socket\n");
+    //read response
+    read(sock,ans,1);
+    if(atoi(ans) == 0)
+        printf("Error: Project %s does not exist.\n",file);
+    else
+        printf("Project %s has been deleted.\n",file);
     return;
 }
 
@@ -239,6 +255,14 @@ int main(int argc, char** argv)
             if(net_sock<0)
                 printf("Error, could not connect to server\n");
             client_creat(argv[2],net_sock);
+            return 0;
+        }
+        else if(strcmp(argv[1],"delete")==0)
+        {
+            int net_sock = initSocket();
+            if(net_sock<0)
+                printf("Error, could not connect to server\n");
+            client_del(argv[2],net_sock);
             return 0;
         }
     }
