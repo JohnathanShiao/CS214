@@ -7,6 +7,7 @@
 #include <string.h>
 #include <netdb.h>
 #include <math.h>
+#include <dirent.h>
 
 int length;
 
@@ -135,7 +136,7 @@ node* readFile(char* file)
     length = 0;
     while(read(fd,c,1) > 0)
     {
-        if(*c != '\t')
+        if(*c != '\t' && *c != '\n')
         {
             length+=1;
             temp = initNode();
@@ -156,9 +157,9 @@ node* readFile(char* file)
     freeList(head);
     if(list == NULL)
     {
-        printf("Warning: file is empty\n");
+        printf("Error: file is empty\n");
         close(fd);
-        return 0;
+        exit(1);
     }
     free(c);
     return list;
@@ -217,7 +218,14 @@ void client_creat(char* file,int sock)
     printf("Finished writing to socket\n");
     read(sock,ans,1);
     if(atoi(ans) == 0)
+    {
         printf("Project %s was created.\n",file);
+        mkdir(file,00777);
+        sprintf(buf,"%s/.Manifest",file);
+        int fd = open(buf, O_WRONLY|O_APPEND|O_CREAT,00777);
+        check(fd,"Error: Could not create a .Manifest for this project.");
+        write(fd,"1\n",2);
+    }
     else
         printf("The project alrady exists.\n");
     return;
@@ -240,22 +248,137 @@ void client_del(char* file,int sock)
     return;
 }
 
+void add(char* project,char* file)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    //check if project exists
+    if(dp==NULL)
+    {
+        printf("Error: The project %s does not exist.\n",project);
+        return;
+    }
+    char* path = myMalloc(strlen(project)+strlen(file)+1);
+    sprintf(path,"%s/%s",project,file);
+    int fd = open(path,O_RDONLY);
+    //check if file exists
+    check(fd,"Error: The file or path provided does not exist. Aborting.");
+    sprintf(path,"%s/.Manifest",project);
+    while(dp!=NULL)
+    {
+        if(strcmp(dp->d_name,".Manifest")==0)
+        {
+            fd = open(path, O_WRONLY | O_APPEND);
+            check(fd,"Error: Could not find .Manifest, Aborting.");
+            char* buf = myMalloc(512);
+            sprintf(buf,"~\t1\t%s/%s",project,file);
+            write(fd,buf,strlen(buf));
+        }
+        dp = readdir(dir);
+    }
+}
+
+void rem(char* project,char* file)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    //check if project exists
+    if(dp==NULL)
+    {
+        printf("Error: The project %s does not exist.\n",project);
+        return;
+    }
+    char* path = myMalloc(strlen(project)+strlen(file)+1);
+    sprintf(path,"%s/%s",project,file);
+    char* man = myMalloc(strlen(project) + 10);
+    sprintf(man,"%s/.Manifest",project);
+    while(dp!=NULL)
+    {
+        if(strcmp(dp->d_name,".Manifest")==0)
+        {
+            node* list = readFile(man);
+            node* ptr = list;
+            node* prev = NULL;
+            node* prev2 = NULL;
+            node* prev3 = NULL;
+            while(ptr!=NULL)
+            {
+                if(strcmp(ptr->data,path)==0)
+                {
+                    if(strcmp(prev2->data,"~")== 0)
+                    {
+                        prev3->next = ptr->next;
+                        ptr->next = NULL;
+                        free(prev2);
+                    }
+                    else
+                    {
+                        prev2->next = ptr->next;
+                        ptr->next = NULL;
+                        free(prev);
+                    }
+                    remove(man);
+                    int fd = open(man, O_WRONLY | O_APPEND | O_CREAT,00777);
+                    check(fd,"Error: Could not update .Manifest file. Aborting.");
+                    int i = 1;
+                    int extra = 0;
+                    ptr = list->next;
+                    write(fd,list->data,strlen(list->data));
+                    write(fd,"\n",1);
+                    while(ptr!=NULL)
+                    {
+                        write(fd,ptr->data,strlen(ptr->data));
+                        if(strcmp(ptr->data,"~")==0 || atoi(ptr->data)>0)
+                            write(fd,"\t",1);
+                        else
+                            write(fd,"\n",1);
+                        ptr=ptr->next;
+                    }
+                    printf("Removed %s from %s\n",file,project);
+                    return;
+                }
+                prev3 = prev2;
+                prev2 = prev;
+                prev = ptr;
+                ptr = ptr->next;
+            }
+        }
+        dp = readdir(dir);
+    }
+    printf("Error: %s does not exist in %s\n",file,project);
+    return;
+}
+
 int main(int argc, char** argv)
 {
     if(argc == 4)
     {
         if(strcmp(argv[1],"configure")==0)
             config(argv[2],argv[ 3]);
+        else if(strcmp(argv[1],"add")==0)
+            add(argv[2],argv[3]);
+        else if(strcmp(argv[1],"remove")==0)
+            rem(argv[2],argv[3]);
+        return 0;
     }
     else if(argc == 3)
     {
+        if(strcmp(argv[1],"configure")==0)
+            printf("Error, expected 4 arguments, received %d\n",argc);
+        else if(strcmp(argv[1],"add")==0)
+            printf("Error, expected 4 arguments, received %d\n",argc);
         if(strcmp(argv[1],"create")==0)
         {
             int net_sock = initSocket();
             if(net_sock<0)
                 printf("Error, could not connect to server\n");
             client_creat(argv[2],net_sock);
-            return 0;
         }
         else if(strcmp(argv[1],"delete")==0)
         {
@@ -263,8 +386,8 @@ int main(int argc, char** argv)
             if(net_sock<0)
                 printf("Error, could not connect to server\n");
             client_del(argv[2],net_sock);
-            return 0;
         }
+        return 0;
     }
     int net_sock = initSocket();
     if(net_sock < 0)
