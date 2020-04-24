@@ -438,11 +438,8 @@ void compress(char* path, node* root)
 void free_hash(LLNode** hash_table)
 {
 	int i;
-	for(i = 0; i < 20; i++)
-    {
-        if(hash_table[i] != NULL)
-		    freeList(hash_table[i]);
-    }
+	for(i = 0; i < 20; i++) 
+		freeList(hash_table[i]);
 }
 
 void swap(node** n1, node**n2)
@@ -523,7 +520,7 @@ LLNode** insert_hash(LLNode** hash_table, char* string, int ascii_value)
 LLNode** build_hashtable(char* file, LLNode** hash_table)
 {
     if(strcmp((file+strlen(file)-4),".hcz")==0)
-        return NULL;
+        return;
 	int fd = open(file, O_RDONLY);
     if(fd < 0)
     {
@@ -821,14 +818,11 @@ void writeBook(LLNode** hash_table)
 void build(char* file,LLNode** hash_table)
 {
     hash_table = build_hashtable(file,hash_table);
-    if(numEntries == 0 || hash_table == NULL)
+    if(numEntries == 0)
     {
-        printf("Error, file is empty or given a wrong file type. Cannot build Huffman Codebook.\n");
-        if(hash_table != NULL)
-        {
-            free_hash(hash_table);
-            free(hash_table);
-        }
+        printf("Error, file is empty. Cannot build Huffman Codebook.\n");
+        free_hash(hash_table);
+        free(hash_table);
         exit(1);
     }
     writeBook(hash_table);
