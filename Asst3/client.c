@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <math.h>
 #include <dirent.h>
+#include<openssl/sha.h>
 
 int length;
 
@@ -16,6 +17,22 @@ typedef struct node
     char* data;
     struct node* next;
 }node;
+
+typedef struct file
+{
+	int version;
+	char* filename;
+	char* digest;
+	//char* path;
+	struct file* next;
+}file;
+
+typedef struct manifest
+{
+	int version;
+	file** files;
+
+}manifest;
 
 void* myMalloc(int size)
 {
@@ -355,6 +372,168 @@ void rem(char* project,char* file)
     return;
 }
 
+char* getDigest(char* file)
+{
+	int fd = open(file, O_RDONLY);
+	if(fd < 0)
+		close(fd);
+	SHA_CTX ctx;
+	SHA1_Init(&ctx);
+	char* c = myMalloc(sizeof(char));
+	while(read(fd, c, 1) > 0)
+	{
+		SHA1_Update(&ctx, c, 1);
+	}
+	unsigned char tmphash[SHA_DIGEST_LENGTH];
+	SHA1_Final(tmphash, &ctx);
+
+	char* hash = myMalloc(SHA_DIGEST_LENGTH*2);
+
+	int i = 0;
+	for(i = 0; i < SHA_DIGEST_LENGTH; i++)
+	{
+  	  sprintf((char*)&(hash[i*2]), "%02x", tmphash[i]);
+	}
+	free(c);
+	close(fd);
+	return hash;
+}
+
+file* initFile(char* filename)
+{
+	file* temp = myMalloc(sizeof(file));
+	temp->version = 1;
+	temp->filename = filename;
+	temp->digest = getDigest(filename);
+	//temp->path = NULL;//getPath(filename); NEEDS TO BE MADE
+	temp->next = NULL;
+
+	return temp;
+}
+
+manifest* initManifest()
+{
+	manifest* temp = myMalloc(sizeof(manifest));
+	temp->version = 0;
+	temp->files = myMalloc(20*sizeof(file*));
+
+	return temp;
+}
+
+void freeManifest(manifest* m)
+{
+	int i;
+	for(i = 0; i < 20; i++)
+	{
+		file* temp = m->files[i];
+		while(temp != NULL)
+		{
+			file* temp2 = temp;
+			temp = temp->next;
+			free(temp2->digest);
+			free(temp2);
+		}
+	}	
+	free(m);
+}
+
+int getASCII(char* filename)
+{
+	int value = 0;
+	int i;
+	for(i = 0; i < strlen(filename); i++)
+	{
+		value += (int)filename[i];
+	}
+	return value;
+}
+
+manifest* insertToManifest(manifest* m, char* filename)
+{
+	int bucket = (getASCII(filename)) % 20;
+	file* temp = initFile(filename);
+	temp->next = m->files[bucket]; 
+	m->files[bucket] = temp;
+	return m;
+}
+
+manifest* updateManifest(manifest* m, char* filename)
+{
+	int bucket = (getASCII(filename)) % 20;
+	file* ptr;
+	for(ptr = m->files[bucket]; ptr != NULL; ptr = ptr->next){
+		if(strcmp(ptr->filename, filename) == 0)
+		{
+			ptr->version++;
+			ptr->digest = getDigest(filename);
+			break;
+		}
+	}
+	return m;
+}
+
+manifest* deleteFromManifest(manifest* m, char* filename)
+{
+	int bucket = (getASCII(filename)) % 20;
+	if(m->files[bucket] == NULL)
+		return m;
+	file* curr = m->files[bucket];
+	file* prev;
+	if(strcmp(m->files[bucket]->filename, filename) == 0) //delete head
+	{ 
+		m->files[bucket] = curr->next;
+		free(curr->digest);
+		free(curr);
+		return m;
+	}
+	while(curr != NULL && (strcmp(curr->filename, filename) != 0))
+	{
+		prev = curr;
+		curr = curr->next;
+	}
+	if(curr == NULL)
+		return m;
+	prev->next = curr->next;
+	free(curr->digest);
+	free(curr);
+	return m;
+}
+
+void createManifestFile(manifest* m)
+{
+	remove("Manifest");			
+	int wfd = open("Manifest", O_WRONLY | O_APPEND | O_CREAT,00600);	//WHY can't i create a .Manifest file
+	if(wfd < 0)
+	{
+		printf("Error, could not create .Manifest.\n");
+		close(wfd);
+		return;
+	}
+	char* num = myMalloc(100*sizeof(char));
+	sprintf(num, "%d", m->version);
+	write(wfd, num, strlen(num));
+	write(wfd, "\n", 1);
+	int i;
+	for(i = 0; i < 20; i++)
+	{
+		file* temp = m->files[i];
+		while(temp != NULL)
+		{
+			file* temp2 = temp;
+			temp = temp->next;
+			sprintf(num, "%d", temp2->version);
+			write(wfd, num, strlen(num));
+			write(wfd, "\t", 1);
+			write(wfd, temp2->filename, strlen(temp2->filename));
+			write(wfd, "\t", 1);
+			write(wfd, temp2->digest, strlen(temp2->digest));
+			write(wfd, "\n", 1);
+		}
+	}	
+	free(num);
+	close(wfd);
+}
+
 int main(int argc, char** argv)
 {
     if(argc == 4)
@@ -399,5 +578,18 @@ int main(int argc, char** argv)
     recv(net_sock,response, sizeof(response),0);
     printf("The server sent back:\n%s",response);
     close(net_sock);
+
+	/*
+	char* file1 = argv[1];
+	char* file2 = argv[2];
+	
+	manifest* m = initManifest();
+	m = insertToManifest(m, file1);
+	m = insertToManifest(m, file2);
+	m = deleteFromManifest(m, file2);
+	createManifestFile(m);
+	freeManifest(m);
+	*/
+
     return 0;
 }
