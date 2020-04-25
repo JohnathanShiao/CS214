@@ -367,8 +367,8 @@ manifest* deleteFromManifest(manifest* m, char* filename)
 
 void createManifestFile(manifest* m)
 {
-	remove("Manifest");			
-	int wfd = open("Manifest", O_WRONLY | O_APPEND | O_CREAT,00600);	//WHY can't i create a .Manifest file
+	remove(".Manifest");			
+	int wfd = open(".Manifest", O_WRONLY | O_APPEND | O_CREAT, 00777);	//WHY can't i create a .Manifest file
 	if(wfd < 0)
 	{
 		printf("Error, could not create .Manifest.\n");
