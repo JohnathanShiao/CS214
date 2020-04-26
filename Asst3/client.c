@@ -450,20 +450,33 @@ void add(char* project,char* file)
         if(strcmp(dp->d_name,".Manifest")==0)
         {
             node* list = readFile(man);
-            while(list != NULL)
+            node* ptr = list;
+            while(ptr != NULL)
             {
-                if(strcmp(list->data,path)==0)
+                if(strcmp(ptr->data,path)==0)
                 {
                     printf("Warning: There is already a file: %s inside of %s, please remove it first.\n",file,project);
+                    free(path);
+                    free(man);
+                    free(dir);
+                    freeList(list);
                     return;
                 }
-                list = list->next;
+                ptr = ptr->next;
             }
             fd = open(man, O_WRONLY | O_APPEND);
             check(fd,"Error: Could not find .Manifest, Aborting.");
-            char* buf = myMalloc(512);
-            sprintf(buf,"0\t%s/%s\t%s\n",project,file,getDigest(path));
+            char* hash = getDigest(path);
+            char* buf = myMalloc(5+strlen(project)+strlen(file)+strlen(hash));
+            sprintf(buf,"0\t%s/%s\t%s\n",project,file,hash);
             write(fd,buf,strlen(buf));
+            free(hash);
+            free(path);
+            free(man);
+            free(dir);
+            freeList(list);
+            free(buf);
+            return;
         }
         dp = readdir(dir);
     }
