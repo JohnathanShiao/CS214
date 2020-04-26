@@ -156,6 +156,7 @@ void serv_creat(int client_sock)
             printf("Could not create project %s\n",fileName);
             return;
         }
+        write(fd,"0\n",2);
     }
 }
 
@@ -233,7 +234,7 @@ void handle_connection(int client_sock)
         strcat(flag,c);
     if(strcmp(flag,"CRT")==0)
         serv_creat(client_sock);
-    else if(strcmp(flag,"DEL")==0)
+    else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
     free(c);
 }
