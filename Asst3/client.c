@@ -370,11 +370,11 @@ int initSocket()
         }
         bcopy((char*)host->h_addr,(char*)&server.sin_addr.s_addr,host->h_length);
     }
-    int status = connect(sock,(struct sockaddr*)&server,sizeof(server));
-    check(status,"There was an error making a connection to the server.");
     free(ip);
     free(port);
     freeList(list);
+    int status = connect(sock,(struct sockaddr*)&server,sizeof(server));
+    check(status,"There was an error connecting to the server.");
     return sock;
 }
 
@@ -562,17 +562,19 @@ int main(int argc, char** argv)
         if(strcmp(argv[1],"create")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<0)
+            if(net_sock<=0)
                 printf("Error, could not connect to server\n");
-            client_creat(argv[2],net_sock);
+            else
+                client_creat(argv[2],net_sock);
             close(net_sock);
         }
         else if(strcmp(argv[1],"destroy")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<0)
+            if(net_sock<=0)
                 printf("Error, could not connect to server\n");
-            client_des(argv[2],net_sock);
+            else
+                client_des(argv[2],net_sock);
             close(net_sock);
         }
         return 0;
