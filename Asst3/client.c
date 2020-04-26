@@ -429,13 +429,20 @@ void add(char* project,char* file)
 {
     struct dirent* dp;
     DIR* dir = opendir(project);
-    dp = readdir(dir);
-    dp = readdir(dir);
-    dp = readdir(dir);
     //check if project exists
+    if(dir == NULL)
+    {
+        printf("Error: The project %s does not exist.\n");
+        return;
+    }
+    dp = readdir(dir);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    //check if project has files
     if(dp==NULL)
     {
-        printf("Error: The project %s does not exist.\n",project);
+        printf("Error: The project %s is empty. Aborting\n",project);
+        free(dir);
         return;
     }
     char* path = myMalloc(strlen(project)+strlen(file)+1);
