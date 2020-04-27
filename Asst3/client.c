@@ -103,9 +103,7 @@ char* getDigest(char* file)
 	}
 	unsigned char tmphash[SHA_DIGEST_LENGTH];
 	SHA1_Final(tmphash, &ctx);
-
 	char* hash = myMalloc(SHA_DIGEST_LENGTH*2);
-
 	int i = 0;
 	for(i = 0; i < SHA_DIGEST_LENGTH; i++)
 	{
@@ -120,7 +118,7 @@ file* initFile()
 {
 	file* temp = myMalloc(sizeof(file));
 	temp->version = 0;
-	temp->filename = myMalloc(512);
+	temp->filename = NULL;
 	temp->digest = NULL;
 	temp->next = NULL;
 	return temp;
@@ -144,10 +142,13 @@ void freeManifest(manifest* m)
 		{
 			file* temp2 = temp;
 			temp = temp->next;
+            if(temp2->filename != NULL)
+                free(temp2->filename);
 			free(temp2->digest);
 			free(temp2);
 		}
-	}	
+	}
+    free(m->files);
 	free(m);
 }
 
@@ -195,6 +196,7 @@ manifest* deleteFromManifest(manifest* m, char* filename)
 	if(strcmp(m->files[bucket]->filename, filename) == 0) //delete head
 	{ 
 		m->files[bucket] = curr->next;
+        free(curr->filename);
 		free(curr->digest);
 		free(curr);
 		return m;
@@ -207,6 +209,7 @@ manifest* deleteFromManifest(manifest* m, char* filename)
 	if(curr == NULL)
 		return m;
 	prev->next = curr->next;
+    free(curr->filename);
 	free(curr->digest);
 	free(curr);
 	return m;
@@ -222,21 +225,23 @@ void createManifestFile(manifest* m,char* path)
 		close(wfd);
 		return;
 	}
-	char* buf = myMalloc(1024);
+	char* buf = myMalloc(32);
 	sprintf(buf, "%d\n", m->version);
 	write(wfd, buf, strlen(buf));
+    free(buf);
+    file* temp;
 	int i;
 	for(i = 0; i < 20; i++)
 	{
-		file* temp = m->files[i];
+		temp = m->files[i];
 		while(temp != NULL)
 		{
-			file* temp2 = temp;
-			temp = temp->next;
-			sprintf(buf, "%d\t%s\t%s\n", temp2->version,temp2->filename,temp2->digest);
+            buf = myMalloc(13+strlen(temp->filename)+strlen(temp->digest));
+			sprintf(buf, "%d\t%s\t%s\n", temp->version,temp->filename,temp->digest);
 			write(wfd, buf, strlen(buf));
+            free(buf);
 		}
-	}	
+	}
 	free(buf);
 	close(wfd);
 }
@@ -499,7 +504,9 @@ manifest* loadManifest(char* manpath)
     }   
     manifest* m = initManifest();
     m->version = atoi(list->data);
+    node* ver = list;
     list = list->next;
+    free(ver);
     node* ptr = list;
     file* temp = initFile();
     int i = 1;
@@ -507,14 +514,16 @@ manifest* loadManifest(char* manpath)
     {
         if(i%3==0)
         {
-            temp->digest = ptr->data;
+            temp->digest = myMalloc(strlen(ptr->data)+1);
+            memcpy(temp->digest,ptr->data,strlen(ptr->data)+1);
             insertToManifest(m,temp);
             temp = initFile();
             i-=2;
         }
         else if(i%2==0)
         {
-            temp->filename = ptr->data;
+            temp->filename = myMalloc(strlen(ptr->data)+1);
+            memcpy(temp->filename,ptr->data,strlen(ptr->data)+1);
             i++;
         }
         else
@@ -524,6 +533,8 @@ manifest* loadManifest(char* manpath)
         }
         ptr = ptr->next;
     }
+    free(temp);
+    freeList(list);
     return m;
 }
 
@@ -544,6 +555,7 @@ void rem(char* project,char* file)
     if(dp == NULL)
     {
         printf("Error: The project %s is empty.\n",project);
+        free(dir);
         return;
     }
     //path to file
@@ -553,13 +565,25 @@ void rem(char* project,char* file)
     char* manPath = myMalloc(strlen(project) + 10);
     sprintf(manPath,"%s/.Manifest",project);
     int fd = open(manPath,O_RDONLY);
-    check(fd,"Error: There is no .Manifest in this project.");
+    if(fd<0)
+    {
+        printf("Error: There is no .Manifest in this project");
+        free(dir);
+        free(path);
+        free(manPath);
+        return;
+    }
+    close(fd);
     //load old manifest
     manifest* man = loadManifest(manPath);
     //delete corresponding file
     man = deleteFromManifest(man,path);
     //recreate manifest without file
     createManifestFile(man,manPath);
+    freeManifest(man);
+    free(path);
+    free(manPath);
+    free(dir);
     return;
 }
 
