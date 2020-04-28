@@ -157,9 +157,7 @@ int getASCII(char* filename)
 	int value = 0;
 	int i;
 	for(i = 0; i < strlen(filename); i++)
-	{
 		value += (int)filename[i];
-	}
 	return value;
 }
 
@@ -332,6 +330,43 @@ node* readFile(char* file)
     {
         printf("Error: file is empty\n");
         close(fd);
+        exit(1);
+    }
+    free(c);
+    return list;
+}
+
+node* readSocket(int socket)
+{
+    char* c = myMalloc(sizeof(char));
+    node* head = NULL;                  //linked list of chars to create a token
+    node* temp;
+    node* list = NULL;                  //linked list of tokens from file
+    length = 0;
+    while(read(socket,c,1) > 0)
+    {
+        if(*c != '\t' && *c != '\n')
+        {
+            length+=1;
+            temp = initNode();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            list = addToList(list,head);
+            length=0;
+            freeList(head);
+            head = NULL;
+        }
+    }
+    if(length > 0)
+        list = addToList(list,head);
+    freeList(head);
+    if(list == NULL)
+    {
+        printf("Error: socket is empty\n");
         exit(1);
     }
     free(c);
@@ -587,6 +622,52 @@ void rem(char* project,char* file)
     return;
 }
 
+void client_hist(char* project, int sock)
+{
+    //allocate enough for a message
+    char* buf = myMalloc(300);
+    char* ans = myMalloc(1);
+    sprintf(buf,"HIS~%d~%s",strlen(project),project);
+    write(sock,buf,strlen(buf));
+    free(buf);
+    printf("Finished writing to socket\n");
+    read(sock,ans,1);
+    if(atoi(ans)==1)
+    {
+        node* list = readSocket(sock);
+        node* ptr = list;
+        if(list== NULL)
+        {
+            printf("Error: Something went wrong reading from socket\n");
+            free(ans);
+            exit(1);
+        }
+        printf("%s\n",ptr->data);
+        ptr = ptr->next;
+        int i = 1;
+        while(ptr!=NULL)
+        {
+            if(i%3==0)
+            {
+                printf("%s\n",ptr->data);
+                i-=2;
+            }
+            else
+            {
+                printf("%s\t",ptr->data);
+                i++;
+            }
+            ptr=ptr->next;
+        }
+        freeList(list);
+    }
+    else if(atoi(ans)==2)
+        printf("Error: There was no .Manifest in %s\n",project);
+    else
+        printf("Error: There is no project named %s\n",project);
+    free(ans);
+}
+
 int main(int argc, char** argv)
 {
     if(argc == 4)
@@ -619,6 +700,15 @@ int main(int argc, char** argv)
                 printf("Error, could not connect to server\n");
             else
                 client_des(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"history")==0)
+        {
+            int net_sock = initSocket();
+            if(net_sock<=0)
+                printf("Error, could not connect to server\n");
+            else
+                client_hist(argv[2],net_sock);
             close(net_sock);
         }
         return 0;
