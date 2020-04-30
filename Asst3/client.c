@@ -9,6 +9,7 @@
 #include <math.h>
 #include <dirent.h>
 #include <openssl/sha.h>
+#include <errno.h>
 
 int length;
 
@@ -358,6 +359,24 @@ node* readSocket(int socket)
             list = addToList(list,head);
             length=0;
             freeList(head);
+            if(*c == '\t')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\t",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            else if(*c == '\n')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\n",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
             head = NULL;
         }
     }
@@ -622,12 +641,12 @@ void rem(char* project,char* file)
     return;
 }
 
-void client_hist(char* project, int sock)
+void client_ver(char* project, int sock)
 {
     //allocate enough for a message
     char* buf = myMalloc(300);
     char* ans = myMalloc(1);
-    sprintf(buf,"HIS~%d~%s",strlen(project),project);
+    sprintf(buf,"VER~%d~%s",strlen(project),project);
     write(sock,buf,strlen(buf));
     free(buf);
     printf("Finished writing to socket\n");
@@ -636,7 +655,7 @@ void client_hist(char* project, int sock)
     {
         node* list = readSocket(sock);
         node* ptr = list;
-        if(list== NULL)
+        if(list == NULL)
         {
             printf("Error: Something went wrong reading from socket\n");
             free(ans);
@@ -666,6 +685,151 @@ void client_hist(char* project, int sock)
     else
         printf("Error: There is no project named %s\n",project);
     free(ans);
+}
+
+int mkdirr(char* p,int mode,int fail_on_exist)
+{
+    int result = 0;
+    char* path = myMalloc(strlen(p)+1);
+    memcpy(path,p,strlen(p));
+    char * dir = NULL;
+    do
+    {
+        if (path == NULL)
+        {
+            result = -1;
+            break;
+        }
+        //try to chop off last directory
+        if ((dir = strrchr(path, '/'))) 
+        {
+            *dir = '\0';
+            result = mkdirr(path, mode,fail_on_exist);
+            *dir = '/';
+            if (result)
+                break;
+        }
+        if (strlen(path))
+        {
+            if ((result = mkdir(path, mode)))
+            {
+                if(EEXIST==errno && fail_on_exist==0)
+                    result=0;
+            }
+        }
+    } while (0);
+    if(path)
+        free(path);
+    return result;
+}
+
+void client_check(char* project,int sock)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    //check if project exists
+    if(dir==NULL)
+    {
+        char* buf = myMalloc(300);
+        char* ans = myMalloc(1);
+        sprintf(buf,"CHK~%d~%s",strlen(project),project);
+        write(sock,buf,strlen(buf));
+        free(buf);
+        read(sock,ans,1);
+        if(atoi(ans)==1)
+        {
+            node* list = readSocket(sock);
+            //make project folder
+            mkdir(project,00777);
+            char* manPath = myMalloc(strlen(project)+10);
+            sprintf(manPath,"%s/.Manifest",project);
+            int fd = open(manPath,O_WRONLY|O_APPEND|O_CREAT,00777);
+            if(fd<0)
+            {
+                printf("Error: Could not create a .Manifest");
+                return;
+            }
+            node* ptr = list;
+            //write version 
+            char* ver = myMalloc(16);
+            sprintf(ver,"%s\n",ptr->data);
+            write(fd,ver,strlen(ver));
+            free(ver);
+            ptr = ptr->next;
+            int i = 1;
+            char* line = myMalloc(256);
+            while(ptr!=NULL)
+            {
+                if(strcmp(ptr->data,"~")==0)
+                    break;
+                if(strcmp(ptr->data,"\t")!=0 && strcmp(ptr->data,"\n")!=0)
+                {
+                    if(i%3==0)
+                    {
+                        strcat(line,ptr->data);
+                        strcat(line,"\n");
+                        write(fd,line,strlen(line));
+                        free(line);
+                        line = myMalloc(256);
+                        i-=2;
+                    }
+                    else
+                    {
+                        strcat(line,ptr->data);
+                        strcat(line,"\t");
+                        if(i%2==0)
+                        {
+                            char* path = myMalloc(strlen(ptr->data)+1);
+                            memcpy(path,ptr->data,strlen(ptr->data));
+                            char* cut = strrchr(path,'/');
+                            *cut = '\0';
+                            if(mkdirr(path,00777,0) == -1)
+                                printf("Could not create path %s",path);
+                            else
+                            {
+                                *cut = '/';
+                                int wfd = open(path,O_CREAT,00777);
+                                close(wfd);
+                            }
+                        }
+                        i++;
+                    }
+                }
+                ptr=ptr->next;
+            }
+            close(fd);
+            //move past delimiter
+            ptr = ptr->next;
+            //start reading the file data after initializing all directories
+            int wfd;
+            while(ptr!=NULL)
+            {
+                if((fd=open(ptr->data,O_WRONLY|O_APPEND))<0)
+                    write(wfd,ptr->data,strlen(ptr->data));
+                else
+                {
+                    wfd = fd;
+                    ptr = ptr->next;
+                }
+                ptr = ptr->next;
+            }
+            close(fd);
+            close(wfd);
+            if(list!=NULL)
+                freeList(list);
+        }
+        else if(atoi(ans)==2)
+            printf("Error: Could not find a .Manifest for project %s. Aborting\n");
+        else
+            printf("Error: The project %s does not exist on the server.\n",project);
+        free(ans);
+        return;
+    }
+    else
+    {
+        printf("Error: The project %s exists locally, cannot checkout.\n",project);
+        return;
+    }
 }
 
 int main(int argc, char** argv)
@@ -702,13 +866,22 @@ int main(int argc, char** argv)
                 client_des(argv[2],net_sock);
             close(net_sock);
         }
-        else if(strcmp(argv[1],"history")==0)
+        else if(strcmp(argv[1],"currentversion")==0)
         {
             int net_sock = initSocket();
             if(net_sock<=0)
                 printf("Error, could not connect to server\n");
             else
-                client_hist(argv[2],net_sock);
+                client_ver(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"checkout")==0)
+        {
+            int net_sock = initSocket();
+            if(net_sock<=0)
+                printf("Error, could not connect to server\n");
+            else
+                client_check(argv[2],net_sock);
             close(net_sock);
         }
         return 0;
