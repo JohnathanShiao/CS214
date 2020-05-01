@@ -110,7 +110,8 @@ char* getDigest(char* file)
 	{
   	  sprintf((char*)&(hash[i*2]), "%02x", tmphash[i]);
 	}
-	free(c);
+    if(c!=NULL)
+	    free(c);
 	close(fd);
 	return hash;
 }
@@ -433,7 +434,14 @@ int initSocket()
     free(port);
     freeList(list);
     int status = connect(sock,(struct sockaddr*)&server,sizeof(server));
-    check(status,"There was an error connecting to the server.");
+    if(status<0)
+    { 
+        char* error = myMalloc(256);
+        sprintf(error,"Could not connect to server:");
+        perror(error);
+        free(error);
+        exit(1);
+    }
     return sock;
 }
 
@@ -505,7 +513,7 @@ void add(char* project,char* file)
         return;
     }
     char* path = myMalloc(strlen(project)+strlen(file)+1);
-    char* man = myMalloc(strlen(project)+10);
+    char* man = myMalloc(strlen(project)+11);
     sprintf(path,"%s/%s",project,file);
     int fd = open(path,O_RDONLY);
     //check if file exists
@@ -554,7 +562,7 @@ manifest* loadManifest(char* manpath)
     if(list == NULL)
     {
         printf("Error: Something went wrong with reading the .Manifest\n");
-        exit(1);
+        return NULL;
     }   
     manifest* m = initManifest();
     m->version = atoi(list->data);
@@ -616,7 +624,7 @@ void rem(char* project,char* file)
     char* path = myMalloc(strlen(project)+strlen(file)+1);
     sprintf(path,"%s/%s",project,file);
     //path to .Manifest
-    char* manPath = myMalloc(strlen(project) + 10);
+    char* manPath = myMalloc(strlen(project) + 11);
     sprintf(manPath,"%s/.Manifest",project);
     int fd = open(manPath,O_RDONLY);
     if(fd<0)
@@ -739,9 +747,15 @@ void client_check(char* project,int sock)
         if(atoi(ans)==1)
         {
             node* list = readSocket(sock);
+            if(list == NULL)
+            {
+                printf("Error: Could not read from socket\n");
+                free(ans);
+                return;
+            }
             //make project folder
             mkdir(project,00777);
-            char* manPath = myMalloc(strlen(project)+10);
+            char* manPath = myMalloc(strlen(project)+11);
             sprintf(manPath,"%s/.Manifest",project);
             int fd = open(manPath,O_WRONLY|O_APPEND|O_CREAT,00777);
             if(fd<0)
@@ -823,13 +837,250 @@ void client_check(char* project,int sock)
         else
             printf("Error: The project %s does not exist on the server.\n",project);
         free(ans);
-        return;
     }
     else
-    {
         printf("Error: The project %s exists locally, cannot checkout.\n",project);
+    return;
+}
+
+int manifestDifference(char* project, manifest* client, manifest* server)
+{
+    char* up = myMalloc(strlen(project)+9);
+    sprintf(up,"%s/.Update",project);
+    int wfd = open(up,O_WRONLY|O_APPEND|O_CREAT,00777);
+    if(wfd<0)
+    {
+        printf("Error: Could not create an Update file\n");
+        free(up);
+        close(wfd);
         return;
     }
+    if(client->version == server->version)
+    {
+        char* conflict = myMalloc(strlen(project)+11);
+        sprintf(conflict,"%s/.Conflict",project);
+        remove(conflict);
+        printf("Up To Date\n");
+        free(up);
+        close(wfd);
+        return;
+    }
+    int i = 0;
+    int c = 0;
+    file* ctemp;
+    file* stemp;
+    for(i;i<20;i++)
+    {
+        ctemp = client->files[i];
+        stemp = server->files[i];
+        //server has, client does not
+        while(ctemp == NULL && stemp!=NULL)
+        {
+            char* line = myMalloc(strlen(stemp->filename)+strlen(stemp->digest)+10);
+            sprintf(line,"A\t%d\t%s\t%s\n",stemp->version,stemp->filename,stemp->digest);
+            write(wfd,line,strlen(line));
+            printf("A %s",stemp->filename);
+            free(line);
+            stemp = stemp->next;
+        }
+        //server does not, client has
+        while(ctemp!=NULL && stemp == NULL)
+        {
+            char* line = myMalloc(strlen(ctemp->filename)+strlen(ctemp->digest)+10);
+            sprintf(line,"D\t%d\t%s\t%s\n",ctemp->version,ctemp->filename,ctemp->digest);
+            write(wfd,line,strlen(line));
+            printf("D %s",ctemp->filename);
+            free(line);
+            ctemp = ctemp->next;
+        }
+        //possible both have
+        if(ctemp!=NULL && stemp!=NULL)
+        {
+            file* cptr = ctemp;
+            file* sptr = stemp;
+            int exists = 0;
+            //check for modify and removes
+            while(cptr != NULL)
+            {
+                while(sptr!=NULL)
+                {
+                    if(strcmp(cptr->filename,sptr->filename)==0)
+                    {
+                        exists = 1;
+                        break;
+                    }
+                    sptr=sptr->next;
+                }
+                if(exists)
+                {
+                    char* live_hash = getDigest(cptr->filename);
+                    //if live has is different from server and client
+                    if(strcmp(live_hash,sptr->digest)!=0 && strcmp(live_hash,cptr->digest)!=0)
+                    {
+                        c = 1;
+                        char* con = myMalloc(strlen(project)+11);
+                        sprintf(con,"%s/.Conflict",project);
+                        int cfd = open(con,O_WRONLY|O_APPEND|O_CREAT,00777);
+                        free(con);
+                        if(cfd<0)
+                        {
+                            printf("Error: Could not create a Conflict file. Aborting\n");
+                            free(up);
+                            freeManifest(server);
+                            freeManifest(client);
+                            return;
+                        }
+                        char* line = myMalloc(strlen(sptr->filename)+strlen(live_hash)+20);
+                        sprintf(line,"C\t%d\t%s\t%s\n",sptr->version,sptr->filename,live_hash);
+                        write(cfd,line,strlen(line));
+                        printf("C %s\n",cptr->filename);
+                        free(line);
+                        // free(live_hash);
+                    }
+                    //if live is same as client
+                    else if(strcmp(cptr->digest,live_hash)==0)
+                    {
+                        char* line = myMalloc(strlen(sptr->filename)+strlen(sptr->digest)+20);
+                        sprintf(line,"M\t%d\t%s\t%s\n",sptr->version,sptr->filename,sptr->digest);
+                        write(wfd,line,strlen(line));
+                        printf("M %s\n",cptr->filename);
+                        free(line);
+                        // free(live_hash);
+                    }
+                }
+                else //write a delete
+                {
+                    char* line = myMalloc(strlen(cptr->filename)+strlen(cptr->digest)+20);
+                    sprintf(line,"D\t%d\t%s\t%s\n",cptr->version,cptr->filename,cptr->digest);
+                    write(wfd,line,strlen(line));
+                    printf("D %s",cptr->filename);
+                    free(line);
+                }
+                cptr = cptr->next;
+                sptr = stemp;
+                exists = 0;
+            }
+            exists = 0;
+            sptr = stemp;
+            cptr = ctemp;
+            //check for adds
+            while(sptr!=NULL)
+            {
+                while(cptr!=NULL)
+                {
+                    if(strcmp(sptr->filename,cptr->filename)==0)
+                    {
+                        exists = 1;
+                        break;
+                    }
+                    cptr = cptr->next;
+                }
+                if(!exists)
+                {
+                    char* line = myMalloc(strlen(sptr->filename)+strlen(sptr->digest)+10);
+                    sprintf(line,"A\t%d\t%s\t%s\n",sptr->version,sptr->filename,sptr->digest);
+                    write(wfd,line,strlen(line));
+                    printf("A %s",sptr->filename);
+                    free(line);
+                }
+                sptr = sptr->next;
+                cptr = ctemp;
+                exists = 0;
+            }
+        }
+    }
+    return c;
+}
+
+void client_update(char* project,int sock)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    if(dir==NULL)
+    {
+        printf("Error: Project %s does not exist locally\n");
+        return;
+    }
+    dp=readdir(dir);
+    dp=readdir(dir);
+    dp=readdir(dir);
+    if(dp!=NULL)
+    {
+        char* buf = myMalloc(300);
+        char* ans = myMalloc(1);
+        sprintf(buf,"UPD~%d~%s",strlen(project),project);
+        write(sock,buf,strlen(buf));
+        free(buf);
+        read(sock,ans,1);
+        if(atoi(ans)==1)
+        {
+            node* list = readSocket(sock);
+            node* ptr = list;
+            manifest* serv_man = initManifest();
+            serv_man->version = atoi(ptr->data);
+            ptr = ptr->next;
+            int i = 1;
+            file* temp = initFile();
+            //load up server manifest
+            while(ptr!=NULL)
+            {
+                if(strcmp(ptr->data,"\t")!=0 && strcmp(ptr->data,"\n")!=0)
+                {
+                    if(i%3==0)
+                    {
+                        temp->digest = myMalloc(strlen(ptr->data)+1);
+                        memcpy(temp->digest,ptr->data,strlen(ptr->data));
+                        serv_man = insertToManifest(serv_man,temp);
+                        temp = initFile();
+                        i-=2;
+                    }
+                    else
+                    {
+                        if(i%2==0)
+                        {
+                            temp->filename = myMalloc(strlen(ptr->data)+1);
+                            memcpy(temp->filename,ptr->data,strlen(ptr->data));
+                        }
+                        else
+                            temp->version = atoi(ptr->data);
+                        i++;
+                    }
+                }
+                ptr = ptr->next;
+            }
+            if(temp->filename == NULL)
+                free(temp);
+            char* manPath = myMalloc(strlen(project)+11);
+            sprintf(manPath,"%s/.Manifest",project);
+            manifest* cli_man = loadManifest(manPath);
+            if(cli_man == NULL)
+            {
+                printf("Error: local manifest is empty\n");
+                free(manPath);
+                free(ans);
+                return;
+            }
+            free(manPath);
+            int x = manifestDifference(project,cli_man,serv_man);
+            if(x)
+            {
+                printf("Conflicts were found, please resolve before updating\n");
+                char* up = myMalloc(strlen(project)+8);
+                sprintf(up,"%s/.Update",project);
+                remove(up);
+            }
+        }
+        else if(atoi(ans)==2)
+            printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
+        else if(atoi(ans)==3)
+            printf("Error: Found .Manifest on server, but it was empty.\n");
+        else
+            printf("Error: The project %s does not exist on the server.\n",project);
+        free(ans);
+    }
+    else
+        printf("Error: Project %s is empty\n",project);
+    return;
 }
 
 int main(int argc, char** argv)
@@ -882,6 +1133,15 @@ int main(int argc, char** argv)
                 printf("Error, could not connect to server\n");
             else
                 client_check(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"update")==0)
+        {
+            int net_sock = initSocket();
+            if(net_sock<=0)
+                printf("Error, could not connect to server\n");
+            else
+                client_update(argv[2],net_sock);
             close(net_sock);
         }
         return 0;

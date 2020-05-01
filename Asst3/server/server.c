@@ -9,6 +9,7 @@
 #include <math.h>
 #include <dirent.h>
 #include<openssl/sha.h>
+#include <errno.h>
 
 typedef struct node
 {
@@ -148,7 +149,6 @@ manifest* initManifest()
 {
 	manifest* temp = myMalloc(sizeof(manifest));
 	temp->version = 0;
-    temp->project = NULL;
 	temp->files = myMalloc(20*sizeof(file*));
 	return temp;
 }
@@ -364,8 +364,6 @@ void freeManifest(manifest* m)
 		}
 	}
     free(m->files);
-    if(m->project!=NULL)
-        free(m->project);
 	free(m);
 }
 
@@ -495,10 +493,15 @@ manifest* serv_ver(int client_sock)
             close(fd);
             return NULL;
         }
-        write(client_sock,"1",1);
         manifest* man = loadManifest(buf);
-        man->project = fileName;
         free(buf);
+        if(man==NULL)
+        {
+            printf("Error: .Manifest is empty\n");
+            write(client_sock,"3",1);
+            return NULL;
+        }
+        write(client_sock,"1",1);
         char* ver = myMalloc(16);
         sprintf(ver,"%d\n",man->version);
         write(client_sock,ver,strlen(ver));
@@ -606,7 +609,7 @@ void handle_connection(int client_sock)
         serv_creat(client_sock);
     else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
-    else if(strcmp(flag,"VER")==0)
+    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0)
     {
         manifest* man = serv_ver(client_sock);
         if(man!=NULL)
@@ -616,6 +619,7 @@ void handle_connection(int client_sock)
         serv_check(client_sock);
     free(c);
     free(flag);
+    close(client_sock);
 }
 
 int main(int argc, char** argv)
@@ -633,12 +637,24 @@ int main(int argc, char** argv)
     }
     int serv_sock;
     serv_sock = socket(AF_INET,SOCK_STREAM,0);
+    int opt = 1;
+    setsockopt(serv_sock,SOL_SOCKET, SO_REUSEPORT,&opt,sizeof(opt));
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    bind(serv_sock,(struct sockaddr*)&server_addr,sizeof(server_addr));
-    listen(serv_sock,1);
+    int b = bind(serv_sock,(struct sockaddr*)&server_addr,sizeof(server_addr));
+    if(b<0)
+    {
+        perror("Bind failed: ");
+        return 0;
+    }
+    int l = listen(serv_sock,1);
+    if(l<0)
+    {
+        perror("Listen failed: ");
+        return 0;
+    }
     int client_sock;
     client_sock = accept(serv_sock,NULL,NULL);
     handle_connection(client_sock);
