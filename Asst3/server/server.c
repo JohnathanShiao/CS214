@@ -29,7 +29,7 @@ typedef struct file
 
 typedef struct manifest
 {
-	pthread_mutex_t* lock;					//HMM
+	pthread_mutex_t* lock; //synchronization
 	int version;
     char* project;
 	file** files;
@@ -149,12 +149,13 @@ char* getDigest(char* file)
 
 manifest* initManifest()
 {	
-	pthread_mutex_t tempLock;										//HMM
 	manifest* temp = myMalloc(sizeof(manifest));
 	temp->version = 0;
 	temp->files = myMalloc(20*sizeof(file*));
-	pthread_mutex_init(&tempLock, NULL);
-	temp->lock = &tempLock;											//HMM
+	pthread_mutex_t tempLock; //initialize mutex for project
+	if(pthread_mutex_init(&tempLock, NULL) != 0)
+		printf("Mutex init for project has failed\n");
+	temp->lock = &tempLock;
 	return temp;
 }
 
@@ -192,7 +193,7 @@ void createManifestFile(manifest* m,char* path)
 
 manifest* deleteFromManifest(manifest* m, char* filename)
 {
-	pthread_mutex_lock(m->lock);
+	pthread_mutex_lock(m->lock);	//synchronization
 	int bucket = (getASCII(filename)) % 20;
 	if(m->files[bucket] == NULL)
 		return m;
@@ -217,13 +218,13 @@ manifest* deleteFromManifest(manifest* m, char* filename)
     free(curr->filename);
 	free(curr->digest);
 	free(curr);
-	pthread_mutex_unlock(m->lock);
+	pthread_mutex_unlock(m->lock); //synchronization
 	return m;
 }
 
 manifest* updateManifest(manifest* m, char* filename)
 {
-	pthread_mutex_lock(m->lock);
+	pthread_mutex_lock(m->lock);	//synchronization
 	int bucket = (getASCII(filename)) % 20;
 	file* ptr;
 	for(ptr = m->files[bucket]; ptr != NULL; ptr = ptr->next)
@@ -235,18 +236,18 @@ manifest* updateManifest(manifest* m, char* filename)
 			break;
 		}
 	}
-	pthread_mutex_unlock(m->lock);
+	pthread_mutex_unlock(m->lock);	//synchronization
 	return m;
 }
 
 manifest* insertToManifest(manifest* m, file* f)
 {
-	pthread_mutex_lock(m->lock);
+	pthread_mutex_lock(m->lock);	//synchronization
 	int bucket = (getASCII(f->filename)) % 20;
 	f->next = m->files[bucket]; 
 	m->files[bucket] = f;
-	pthread_mutex_unlock(m->lock);
-	return m;
+	pthread_mutex_unlock(m->lock);	//synchronization
+	return m;	
 }
 
 node* readFile(char* file)
@@ -290,7 +291,6 @@ node* readFile(char* file)
 
 manifest* loadManifest(char* manpath)
 {
-	
     node* list = readFile(manpath);
     if(list == NULL)
     {
@@ -298,7 +298,7 @@ manifest* loadManifest(char* manpath)
         return NULL;
     }   
     manifest* m = initManifest();
-	pthread_mutex_lock(m->lock);
+	pthread_mutex_lock(m->lock);	//synchronization
     m->version = atoi(list->data);
     node* ver = list;
     list = list->next;
@@ -331,7 +331,7 @@ manifest* loadManifest(char* manpath)
     }
     free(temp);
     freeList(list);
-	pthread_mutex_unlock(m->lock);
+	pthread_mutex_unlock(m->lock);	//synchronization
     return m;
 }
 
@@ -379,7 +379,7 @@ void freeManifest(manifest* m)
 		}
 	}
     free(m->files);
-	pthread_mutex_destroy(m->lock);				//HMM
+	pthread_mutex_destroy(m->lock);		//synchronization
 	free(m);
 }
 
@@ -511,6 +511,7 @@ manifest* serv_ver(int client_sock)
         }
         manifest* man = loadManifest(buf);
         free(buf);
+		pthread_mutex_lock(man->lock); 		//synchronization
         if(man==NULL)
         {
             printf("Error: .Manifest is empty\n");
@@ -536,6 +537,7 @@ manifest* serv_ver(int client_sock)
                 temp = temp->next;
             }
         }
+		pthread_mutex_unlock(man->lock);		//synchronization
         return man;
     }
     else
@@ -567,6 +569,7 @@ void serv_check(int client_sock)
     char* manPath = myMalloc(strlen(fileName)+11);
     sprintf(manPath,"%s/.Manifest",fileName);
     manifest* man = loadManifest(manPath);
+	pthread_mutex_lock(man->lock);					//Synchronization
     if(man == NULL)
     {
         write(client_sock,"2",1);
@@ -610,6 +613,7 @@ void serv_check(int client_sock)
             temp = temp->next;
         }
     }
+	pthread_mutex_unlock(man->lock); 		//synchronization
     free(man);
 }
 
@@ -626,6 +630,7 @@ void serv_upgrade(int client_sock)
     char* manPath = myMalloc(strlen(fileName)+11);
     sprintf(manPath,"%s/.Manifest",fileName);
     manifest* man = loadManifest(manPath);
+	pthread_mutex_lock(man->lock);				//synchronization
     if(man == NULL)
     {
         write(client_sock,"2",1);
@@ -657,6 +662,7 @@ void serv_upgrade(int client_sock)
             temp = temp->next;
         }
     }
+	pthread_mutex_unlock(man->lock);				//synchronization
     free(man);
 }
 
@@ -730,7 +736,7 @@ int main(int argc, char** argv)
 			pthread_t tid;
    			pthread_create(&tid, NULL, handle_connection, &client_sock);
 		}else
-			perror("Accept failed: ");	//don't return since there can be other clients ??
+			perror("Accept failed: ");	//don't return since there can be other threads ?
 	}
     close(serv_sock);
     return 0;
