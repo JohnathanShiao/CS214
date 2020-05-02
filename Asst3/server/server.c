@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include<openssl/sha.h>
 #include <errno.h>
+#include <pthread.h>
 
 typedef struct node
 {
@@ -645,8 +646,9 @@ void serv_upgrade(int client_sock)
     free(man);
 }
 
-void handle_connection(int client_sock)
+void* handle_connection(void* cs)
 {
+	int client_sock = *(int*)cs;
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -706,8 +708,13 @@ int main(int argc, char** argv)
         return 0;
     }
     int client_sock;
+	
+	//while(1)
+	//{
     client_sock = accept(serv_sock,NULL,NULL);
-    handle_connection(client_sock);
+	pthread_t tid;
+    pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
+	//}
     close(serv_sock);
     return 0;
 }

@@ -1,4 +1,4 @@
 all:
-	gcc -g server.c -lcrypto -o WTFserver
+	gcc -g server.c -lcrypto -lpthread -o WTFserver
 clean:
 	rm -rf WTFserver
