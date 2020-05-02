@@ -8,8 +8,8 @@
 #include <netdb.h>
 #include <math.h>
 #include <dirent.h>
-#include<openssl/sha.h>
-#include <errno.h>
+#include <openssl/sha.h>
+#include <pthread.h>
 
 typedef struct node
 {
@@ -29,8 +29,8 @@ typedef struct file
 typedef struct manifest
 {
 	int version;
-    char* project;
 	file** files;
+
 }manifest;
 
 int length;
@@ -178,7 +178,6 @@ void createManifestFile(manifest* m,char* path)
 			sprintf(buf, "%d\t%s\t%s\n", temp->version,temp->filename,temp->digest);
 			write(wfd, buf, strlen(buf));
             free(buf);
-            temp = temp->next;
 		}
 	}
 	free(buf);
@@ -270,8 +269,9 @@ node* readFile(char* file)
     freeList(head);
     if(list == NULL)
     {
-        printf("Warning: file is empty\n");
+        printf("Error: file is empty\n");
         close(fd);
+        exit(1);
     }
     free(c);
     return list;
@@ -283,7 +283,7 @@ manifest* loadManifest(char* manpath)
     if(list == NULL)
     {
         printf("Error: Something went wrong with reading the .Manifest\n");
-        return NULL;
+        exit(1);
     }   
     manifest* m = initManifest();
     m->version = atoi(list->data);
@@ -319,33 +319,6 @@ manifest* loadManifest(char* manpath)
     free(temp);
     freeList(list);
     return m;
-}
-
-char* clientMessage(int client_sock)
-{
-    //get size
-    char* c = myMalloc(1);
-    char* size = myMalloc(32);
-    int i = 0;
-    while(read(client_sock,c,1)>0 && *c != '~')
-        strcat(size,c);
-    //convert size to int
-    int siz = atoi(size);
-    if(siz <= 0)
-    {   
-        printf("Something went wrong with delete.\n");
-        exit(1);
-    }
-    char* fileName = myMalloc(siz);
-    i=0;
-    for(i;i<siz;i++)
-    {
-        read(client_sock,c,1);
-        strcat(fileName,c);
-    }
-    free(c);
-    free(size);
-    return fileName;
 }
 
 void freeManifest(manifest* m)
@@ -398,9 +371,29 @@ int fileLookup(char* file)
     return 0;
 }
 
+
 void serv_creat(int client_sock)
 {
-    char* fileName = clientMessage(client_sock);
+    //get size
+    char* c = myMalloc(1);
+    char* size = myMalloc(32);
+    int i = 0;
+    while(read(client_sock,c,1)>0 && *c != '~')
+        strcat(size,c);
+    //convert size to int
+    int siz = atoi(size);
+    if(siz <= 0)
+    {
+        printf("Something went wrong with create.\n");
+        exit(1);
+    }
+    char* fileName = myMalloc(siz);
+    i=0;
+    for(i;i<siz;i++)
+    {
+        read(client_sock,c,1);
+        strcat(fileName,c);
+    }
     // read(client_sock,fileName,siz);
     //read siz amount of bytes for filename
     if(fileLookup(fileName))
@@ -416,14 +409,14 @@ void serv_creat(int client_sock)
         if(fd<0)
         {
             printf("Could not create project %s\n",fileName);
-            free(fileName);
-            free(path);
             return;
         }
         write(fd,"0\n",2);
         free(path);
         close(fd);
     }
+    free(c);
+    free(size);
     free(fileName);
 }
 
@@ -435,10 +428,7 @@ int recurse_del(char* file)
     dp = readdir(dir);
     dp = readdir(dir);
     if(dp == NULL)
-    {
-        free(dir);
         return 1;
-    }
     char* temp;
     while(dp!=NULL)
     {
@@ -459,13 +449,31 @@ int recurse_del(char* file)
         }
         dp = readdir(dir);
     }
-    free(dir);
     return 1;
 }
 
 void serv_del(int client_sock)
 {
-    char* fileName = clientMessage(client_sock);
+    //get size
+    char* c = myMalloc(1);
+    char* size = myMalloc(32);
+    int i = 0;
+    while(read(client_sock,c,1)>0 && *c != '~')
+        strcat(size,c);
+    //convert size to int
+    int siz = atoi(size);
+    if(siz <= 0)
+    {
+        printf("Something went wrong with delete.\n");
+        exit(1);
+    }
+    char* fileName = myMalloc(siz);
+    i=0;
+    for(i;i<siz;i++)
+    {
+        read(client_sock,c,1);
+        strcat(fileName,c);
+    }
     if(fileLookup(fileName))
     {
         if(recurse_del(fileName))
@@ -475,34 +483,51 @@ void serv_del(int client_sock)
     else
         write(client_sock,"0",1);
     free(fileName);
+    free(size);
+    free(c);
 }
 
-manifest* serv_ver(int client_sock)
+void serv_hist(int client_sock)
 {
-    char* fileName = clientMessage(client_sock);
+    //get size
+    char* c = myMalloc(1);
+    char* size = myMalloc(32);
+    int i = 0;
+    while(read(client_sock,c,1)>0 && *c != '~')
+        strcat(size,c);
+    //convert size to int
+    int siz = atoi(size);
+    if(siz <= 0)
+    {   
+        printf("Something went wrong with delete.\n");
+        exit(1);
+    }
+    char* fileName = myMalloc(siz);
+    i=0;
+    for(i;i<siz;i++)
+    {
+        read(client_sock,c,1);
+        strcat(fileName,c);
+    }
     if(fileLookup(fileName))
     {
-        char* buf = myMalloc(11+strlen(fileName));
+        char* buf = myMalloc(10+strlen(fileName));
         sprintf(buf,"%s/.Manifest",fileName);
         int fd = open(buf,O_RDONLY);
         if(fd<0)
         {
             printf("Error: Could not find .Manifest for %s\n",fileName);
             write(client_sock,"2",1);
+            free(size);
             free(fileName);
             free(buf);
             close(fd);
-            return NULL;
-        }
-        manifest* man = loadManifest(buf);
-        free(buf);
-        if(man==NULL)
-        {
-            printf("Error: .Manifest is empty\n");
-            write(client_sock,"3",1);
-            return NULL;
+            free(c);
+            return;
         }
         write(client_sock,"1",1);
+        manifest* man = loadManifest(buf);
+        free(buf);
         char* ver = myMalloc(16);
         sprintf(ver,"%d\n",man->version);
         write(client_sock,ver,strlen(ver));
@@ -521,132 +546,15 @@ manifest* serv_ver(int client_sock)
                 temp = temp->next;
             }
         }
-        return man;
+        free(man);
     }
     else
         write(client_sock,"0",1);
-    free(fileName);
-    return NULL;
 }
 
-void writeFile(char* file, int client_sock)
+void* handle_connection(void* cs)
 {
-    int fd = open(file,O_RDONLY);
-    write(client_sock,file,strlen(file));
-    write(client_sock,"\t",1);
-    char* c = myMalloc(1);
-    while(read(fd,c,1)>0)
-        write(client_sock,c,1);
-}
-
-void serv_check(int client_sock)
-{
-    char* fileName = clientMessage(client_sock);
-    if(!fileLookup(fileName))
-    {
-        printf("Error: Project %s does not exist.\n",fileName);
-        write(client_sock,"0",1);
-        free(fileName);
-        return;
-    }
-    char* manPath = myMalloc(strlen(fileName)+11);
-    sprintf(manPath,"%s/.Manifest",fileName);
-    manifest* man = loadManifest(manPath);
-    if(man == NULL)
-    {
-        write(client_sock,"2",1);
-        free(fileName);
-        free(manPath);
-        return;
-    }
-    write(client_sock,"1",1);
-    char* ver = myMalloc(16);
-    sprintf(ver,"%d\n",man->version);
-    write(client_sock,ver,strlen(ver));
-    free(ver);
-    file* temp;
-    int i = 0;
-    for(i;i<20;i++)
-    {
-        temp = man->files[i];
-        if(temp!=NULL)
-        {
-            char* line = myMalloc(12 + strlen(temp->filename)+strlen(temp->digest));
-            sprintf(line,"%d\t%s\t%s\n",temp->version,temp->filename,temp->digest);
-            write(client_sock,line,strlen(line));
-            free(line);
-            temp = temp->next;
-        }
-    }
-    write(client_sock,"~\t",2);
-    printf("Finished with Manifest, sending files...\n");
-    i = 0;
-    for(i;i<20;i++)
-    {
-        temp = man->files[i];
-        while(temp!=NULL)
-        {
-            int fd = open(temp->filename,O_RDONLY);
-            if(fd<0)
-                printf("Error: Could not find file %s",temp->filename);
-            else
-                writeFile(temp->filename,client_sock);
-            close(fd);
-            temp = temp->next;
-        }
-    }
-    free(man);
-}
-
-void serv_upgrade(int client_sock)
-{
-    char* fileName = clientMessage(client_sock);
-    if(!fileLookup(fileName))
-    {
-        printf("Error: Project %s does not exist.\n",fileName);
-        write(client_sock,"0",1);
-        free(fileName);
-        return;
-    }
-    char* manPath = myMalloc(strlen(fileName)+11);
-    sprintf(manPath,"%s/.Manifest",fileName);
-    manifest* man = loadManifest(manPath);
-    if(man == NULL)
-    {
-        write(client_sock,"2",1);
-        free(fileName);
-        free(manPath);
-        return;
-    }
-    //manifest exists
-    write(client_sock,"1",1);
-    //write version
-    char* ver = myMalloc(16);
-    sprintf(ver,"%d\n",man->version);
-    write(client_sock,ver,strlen(ver));
-    free(ver);
-    //write out all files from manifest
-    file* temp;
-    int i = 0;
-    for(i;i<20;i++)
-    {
-        temp = man->files[i];
-        while(temp!=NULL)
-        {
-            int fd = open(temp->filename,O_RDONLY);
-            if(fd<0)
-                printf("Error: Could not find file %s",temp->filename);
-            else
-                writeFile(temp->filename,client_sock);
-            close(fd);
-            temp = temp->next;
-        }
-    }
-    free(man);
-}
-
-void handle_connection(int client_sock)
-{
+	int client_sock = *((int*)cs);
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -657,19 +565,10 @@ void handle_connection(int client_sock)
         serv_creat(client_sock);
     else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
-    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0)
-    {
-        manifest* man = serv_ver(client_sock);
-        if(man!=NULL)
-            free(man);
-    }
-    else if(strcmp(flag,"CHK")==0)
-        serv_check(client_sock);
-    else if(strcmp(flag,"UPG")==0)
-        serv_upgrade(client_sock);
+    else if(strcmp(flag,"HIS")==0)
+        serv_hist(client_sock);
     free(c);
     free(flag);
-    close(client_sock);
 }
 
 int main(int argc, char** argv)
@@ -680,34 +579,32 @@ int main(int argc, char** argv)
         return 0;
     }
     int port = atoi(argv[1]);
-    if(port <= 1024)
+    if(port <= 0)
     {
         printf("Error: %s is not a valid port\n",argv[1]);
         return 0;
     }
     int serv_sock;
     serv_sock = socket(AF_INET,SOCK_STREAM,0);
-    int opt = 1;
-    setsockopt(serv_sock,SOL_SOCKET, SO_REUSEPORT,&opt,sizeof(opt));
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    int b = bind(serv_sock,(struct sockaddr*)&server_addr,sizeof(server_addr));
-    if(b<0)
-    {
-        perror("Bind failed: ");
-        return 0;
-    }
-    int l = listen(serv_sock,1);
-    if(l<0)
-    {
-        perror("Listen failed: ");
-        return 0;
-    }
+    bind(serv_sock,(struct sockaddr*)&server_addr,sizeof(server_addr));
+    listen(serv_sock,1);
     int client_sock;
-    client_sock = accept(serv_sock,NULL,NULL);
-    handle_connection(client_sock);
+	while(1)
+	{
+	    client_sock = accept(serv_sock,NULL,NULL);
+		if(client_sock > 0)
+		{
+			pthread_t tid;
+   			pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
+		}else
+			perror("Accept failed: ");	//don't return since there can be other threads ?
+	}
+    //client_sock = accept(serv_sock,NULL,NULL);
+    //handle_connection(client_sock);
     close(serv_sock);
     return 0;
 }
