@@ -178,6 +178,7 @@ void createManifestFile(manifest* m,char* path)
 			sprintf(buf, "%d\t%s\t%s\n", temp->version,temp->filename,temp->digest);
 			write(wfd, buf, strlen(buf));
             free(buf);
+            temp = temp->next;
 		}
 	}
 	free(buf);
@@ -481,7 +482,7 @@ manifest* serv_ver(int client_sock)
     char* fileName = clientMessage(client_sock);
     if(fileLookup(fileName))
     {
-        char* buf = myMalloc(10+strlen(fileName));
+        char* buf = myMalloc(11+strlen(fileName));
         sprintf(buf,"%s/.Manifest",fileName);
         int fd = open(buf,O_RDONLY);
         if(fd<0)
@@ -548,7 +549,7 @@ void serv_check(int client_sock)
         free(fileName);
         return;
     }
-    char* manPath = myMalloc(strlen(fileName)+10);
+    char* manPath = myMalloc(strlen(fileName)+11);
     sprintf(manPath,"%s/.Manifest",fileName);
     manifest* man = loadManifest(manPath);
     if(man == NULL)
@@ -597,6 +598,53 @@ void serv_check(int client_sock)
     free(man);
 }
 
+void serv_upgrade(int client_sock)
+{
+    char* fileName = clientMessage(client_sock);
+    if(!fileLookup(fileName))
+    {
+        printf("Error: Project %s does not exist.\n",fileName);
+        write(client_sock,"0",1);
+        free(fileName);
+        return;
+    }
+    char* manPath = myMalloc(strlen(fileName)+11);
+    sprintf(manPath,"%s/.Manifest",fileName);
+    manifest* man = loadManifest(manPath);
+    if(man == NULL)
+    {
+        write(client_sock,"2",1);
+        free(fileName);
+        free(manPath);
+        return;
+    }
+    //manifest exists
+    write(client_sock,"1",1);
+    //write version
+    char* ver = myMalloc(16);
+    sprintf(ver,"%d\n",man->version);
+    write(client_sock,ver,strlen(ver));
+    free(ver);
+    //write out all files from manifest
+    file* temp;
+    int i = 0;
+    for(i;i<20;i++)
+    {
+        temp = man->files[i];
+        while(temp!=NULL)
+        {
+            int fd = open(temp->filename,O_RDONLY);
+            if(fd<0)
+                printf("Error: Could not find file %s",temp->filename);
+            else
+                writeFile(temp->filename,client_sock);
+            close(fd);
+            temp = temp->next;
+        }
+    }
+    free(man);
+}
+
 void handle_connection(int client_sock)
 {
     char* flag = myMalloc(3);
@@ -617,6 +665,8 @@ void handle_connection(int client_sock)
     }
     else if(strcmp(flag,"CHK")==0)
         serv_check(client_sock);
+    else if(strcmp(flag,"UPG")==0)
+        serv_upgrade(client_sock);
     free(c);
     free(flag);
     close(client_sock);

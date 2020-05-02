@@ -240,9 +240,9 @@ void createManifestFile(manifest* m,char* path)
 			sprintf(buf, "%d\t%s\t%s\n", temp->version,temp->filename,temp->digest);
 			write(wfd, buf, strlen(buf));
             free(buf);
+            temp = temp->next;
 		}
 	}
-	free(buf);
 	close(wfd);
 }
 
@@ -301,7 +301,8 @@ node* addToList(node* head,node* word)
 node* readFile(char* file)
 {
     int fd = open(file,O_RDONLY);
-    check(fd,"Error: Could not open file.");
+    if(fd<0)
+        return NULL;
     char* c = myMalloc(sizeof(char));
     node* head = NULL;                  //linked list of chars to create a token
     node* temp;
@@ -330,9 +331,8 @@ node* readFile(char* file)
     freeList(head);
     if(list == NULL)
     {
-        printf("Error: file is empty\n");
         close(fd);
-        exit(1);
+        return NULL;
     }
     free(c);
     return list;
@@ -524,6 +524,11 @@ void add(char* project,char* file)
         if(strcmp(dp->d_name,".Manifest")==0)
         {
             node* list = readFile(man);
+            if(list==NULL)
+            {
+                printf("Error: .Manifest is empty\n");
+                return;
+            }
             node* ptr = list;
             while(ptr != NULL)
             {
@@ -560,10 +565,7 @@ manifest* loadManifest(char* manpath)
 {
     node* list = readFile(manpath);
     if(list == NULL)
-    {
-        printf("Error: Something went wrong with reading the .Manifest\n");
         return NULL;
-    }   
     manifest* m = initManifest();
     m->version = atoi(list->data);
     node* ver = list;
@@ -629,7 +631,7 @@ void rem(char* project,char* file)
     int fd = open(manPath,O_RDONLY);
     if(fd<0)
     {
-        printf("Error: There is no .Manifest in this project");
+        printf("Error: There is no .Manifest in this project\n");
         free(dir);
         free(path);
         free(manPath);
@@ -638,6 +640,14 @@ void rem(char* project,char* file)
     close(fd);
     //load old manifest
     manifest* man = loadManifest(manPath);
+    if(man==NULL)
+    {
+        printf("Error: Something went wrong while loading .Manifest\n");
+        free(dir);
+        free(path);
+        free(manPath);
+        return;
+    }
     //delete corresponding file
     man = deleteFromManifest(man,path);
     //recreate manifest without file
@@ -1065,7 +1075,7 @@ void client_update(char* project,int sock)
             if(x)
             {
                 printf("Conflicts were found, please resolve before updating\n");
-                char* up = myMalloc(strlen(project)+8);
+                char* up = myMalloc(strlen(project)+9);
                 sprintf(up,"%s/.Update",project);
                 remove(up);
             }
@@ -1080,6 +1090,230 @@ void client_update(char* project,int sock)
     }
     else
         printf("Error: Project %s is empty\n",project);
+    return;
+}
+
+int recurse_del(char* file)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(file);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    dp = readdir(dir);
+    if(dp == NULL)
+    {
+        free(dir);
+        return 1;
+    }
+    char* temp;
+    while(dp!=NULL)
+    {
+        if(dp->d_type == 4)
+        {
+            temp = myMalloc(strlen(file)+256);
+            sprintf(temp,"%s/%s",file,dp->d_name);
+            if(recurse_del(temp))
+                remove(temp);
+            free(temp);
+        }
+        else if(dp->d_type == 8)
+        {
+            temp = myMalloc(strlen(file)+256);
+            sprintf(temp,"%s/%s",file,dp->d_name);
+            remove(temp);
+            free(temp);
+        }
+        dp = readdir(dir);
+    }
+    free(dir);
+    return 1;
+}
+
+void client_upgrade(char* project,int sock)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    //check if project exists
+    if(dir!=NULL)
+    {
+        char* con = myMalloc(strlen(project)+11);
+        sprintf(con,"%s/.Conflict",project);
+        int fd = open(con,O_RDONLY);
+        //check if conflict exists
+        if(fd>0)
+        {
+            printf("Error: Please resolve all conflicts and update\n");
+            free(con);
+            return;
+        }
+        free(con);
+        char* up = myMalloc(strlen(project)+9);
+        sprintf(up,"%s/.Update",project);
+        fd = open(up,O_RDONLY);
+        //check if update exists
+        if(fd<0)
+        {
+            printf("Error: No .Update, please run update on %s\n",project);
+            free(up);
+            free(dir);
+            return;
+        }
+        char* buf = myMalloc(300);
+        char* ans = myMalloc(1);
+        sprintf(buf,"UPG~%d~%s",strlen(project),project);
+        write(sock,buf,strlen(buf));
+        free(buf);
+        read(sock,ans,1);
+        //exists on server
+        if(atoi(ans)==1)
+        {
+            //read all files from server
+            node* list = readSocket(sock);
+            //read update file
+            node* update = readFile(up);
+            if(update == NULL)
+            {
+                printf("Up To Date\n");
+                freeList(list);
+                free(ans);
+                remove(up);
+                return;
+            }
+            char* manPath = myMalloc(strlen(project)+11);
+            sprintf(manPath,"%s/.Manifest",project);
+            //read manifest
+            manifest* man = loadManifest(manPath);
+            if(man==NULL)
+            {
+                printf("Error: Manifest is empty\n");
+                freeList(list);
+                free(update);
+                free(manPath);
+                free(ans);
+                return;
+            }
+            man->version = atoi(list->data);
+            //apply updates
+            node* uptr = update;
+            while(uptr!=NULL)
+            {
+                if(strcmp(uptr->data,"D")==0)
+                {
+                    //skip version
+                    uptr=uptr->next;
+                    uptr=uptr->next;
+                    man = deleteFromManifest(man,uptr->data);
+                    char* path = myMalloc(strlen(uptr->data)+1);
+                    memcpy(path,uptr->data,strlen(uptr->data));
+                    remove(path);
+                }
+                else if(strcmp(uptr->data,"A")==0)
+                {
+                    file* temp = initFile();
+                    uptr = uptr->next;
+                    temp->version = atoi(uptr->data);
+                    uptr=uptr->next;
+                    temp->filename = myMalloc(strlen(uptr->data)+1);
+                    memcpy(temp->filename,uptr->data,strlen(uptr->data));
+                    uptr=uptr->next;
+                    temp->digest = myMalloc(strlen(uptr->data)+1);
+                    memcpy(temp->digest,uptr->data,strlen(uptr->data));
+                    man = insertToManifest(man,temp);
+                    //no guarantee path exists, create it
+                    char* path = myMalloc(strlen(temp->filename)+1);
+                    memcpy(path,temp->filename,strlen(temp->filename));
+                    char* cut = strrchr(path,'/');
+                    *cut = '\0';
+                    if(mkdirr(path,00777,0) == -1)
+                    {
+                        printf("Could not create path %s",path);
+                        return;
+                    }
+                    else
+                    {
+                        *cut = '/';
+                        //create file
+                        int wfd = open(path,O_WRONLY|O_APPEND|O_CREAT,00777);
+                        node* lptr = list;
+                        //fill with new data
+                        while(lptr!=NULL)
+                        {
+                            if(strcmp(lptr->data, temp->filename)==0)
+                            {
+                                //skip the tab after filenames
+                                lptr = lptr->next;
+                                lptr = lptr->next;
+                                while(fd=open(lptr->data,O_WRONLY|O_APPEND)<0)
+                                {
+                                    write(wfd,lptr->data,strlen(lptr->data));
+                                    lptr = lptr->next;
+                                    if(lptr==NULL)
+                                        break;
+                                }
+                            }
+                            if(lptr==NULL)
+                                break;
+                            lptr=lptr->next;
+                        }
+                    }
+                }
+                else if(strcmp(uptr->data,"M")==0)
+                {
+                    //create the new file
+                    file* temp = initFile();
+                    uptr = uptr->next;
+                    temp->version = atoi(uptr->data);
+                    uptr=uptr->next;
+                    temp->filename = myMalloc(strlen(uptr->data)+1);
+                    memcpy(temp->filename,uptr->data,strlen(uptr->data));
+                    uptr=uptr->next;
+                    temp->digest = myMalloc(strlen(uptr->data)+1);
+                    memcpy(temp->digest,uptr->data,strlen(uptr->data));
+                    //remove local version
+                    remove(temp->filename);
+                    //remove manifest entry
+                    man = deleteFromManifest(man,temp->filename);
+                    //replace manifest entry
+                    man = insertToManifest(man,temp);
+                    //create empty new version
+                    int wfd = open(temp->filename,O_WRONLY|O_APPEND|O_CREAT,00777);
+                    node* lptr = list;
+                    //fill with new data
+                    while(lptr!=NULL)
+                    {
+                        if(strcmp(lptr->data, temp->filename)==0)
+                        {
+                            lptr = lptr->next;
+                            lptr = lptr->next;
+                            while(fd=open(lptr->data,O_WRONLY|O_APPEND)<0)
+                            {
+                                write(wfd,lptr->data,strlen(lptr->data));
+                                lptr = lptr->next;
+                                if(lptr==NULL)
+                                    break;
+                            }
+                        }
+                        if(lptr==NULL)
+                            break;
+                        lptr=lptr->next;
+                    }
+                }
+                uptr = uptr->next;
+            }
+            remove(up);
+            createManifestFile(man,manPath);
+            free(man);
+        }
+        else if(atoi(ans)==2)
+            printf("Error: Could not find a .Manifest for project %s. Aborting\n");
+        else if(atoi(ans)==3)
+            printf("Error: Found .Manifest on server, but it was empty.\n");
+        else
+            printf("Error: The project %s does not exist on the server.\n",project);
+        free(ans);
+    }
+    else
+        printf("Error: The project %s does not exist locally, cannot upgrade.\n",project);
     return;
 }
 
@@ -1102,46 +1336,37 @@ int main(int argc, char** argv)
         if(strcmp(argv[1],"create")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<=0)
-                printf("Error, could not connect to server\n");
-            else
-                client_creat(argv[2],net_sock);
+            client_creat(argv[2],net_sock);
             close(net_sock);
         }
         else if(strcmp(argv[1],"destroy")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<=0)
-                printf("Error, could not connect to server\n");
-            else
-                client_des(argv[2],net_sock);
+            client_des(argv[2],net_sock);
             close(net_sock);
         }
         else if(strcmp(argv[1],"currentversion")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<=0)
-                printf("Error, could not connect to server\n");
-            else
-                client_ver(argv[2],net_sock);
+            client_ver(argv[2],net_sock);
             close(net_sock);
         }
         else if(strcmp(argv[1],"checkout")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<=0)
-                printf("Error, could not connect to server\n");
-            else
-                client_check(argv[2],net_sock);
+            client_check(argv[2],net_sock);
             close(net_sock);
         }
         else if(strcmp(argv[1],"update")==0)
         {
             int net_sock = initSocket();
-            if(net_sock<=0)
-                printf("Error, could not connect to server\n");
-            else
-                client_update(argv[2],net_sock);
+            client_update(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"upgrade")==0)
+        {
+            int net_sock = initSocket();
+            client_upgrade(argv[2],net_sock);
             close(net_sock);
         }
         return 0;
