@@ -715,7 +715,7 @@ int main(int argc, char** argv)
 		if(client_sock > 0)
 		{
 			pthread_t tid;
-   			pthread_create(&tid, NULL, handle_connection, &client_sock);
+   			pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
 		}else
 			perror("Accept failed: ");	//don't return since there can be other threads ?
 	}
