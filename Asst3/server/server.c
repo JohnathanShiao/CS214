@@ -29,6 +29,7 @@ typedef struct file
 
 typedef struct manifest
 {
+	pthread_mutex_t* lock;					//HMM
 	int version;
     char* project;
 	file** files;
@@ -147,10 +148,13 @@ char* getDigest(char* file)
 }
 
 manifest* initManifest()
-{
+{	
+	pthread_mutex_t tempLock;										//HMM
 	manifest* temp = myMalloc(sizeof(manifest));
 	temp->version = 0;
 	temp->files = myMalloc(20*sizeof(file*));
+	pthread_mutex_init(&tempLock, NULL);
+	temp->lock = &tempLock;											//HMM
 	return temp;
 }
 
@@ -188,6 +192,7 @@ void createManifestFile(manifest* m,char* path)
 
 manifest* deleteFromManifest(manifest* m, char* filename)
 {
+	pthread_mutex_lock(m->lock);
 	int bucket = (getASCII(filename)) % 20;
 	if(m->files[bucket] == NULL)
 		return m;
@@ -212,11 +217,13 @@ manifest* deleteFromManifest(manifest* m, char* filename)
     free(curr->filename);
 	free(curr->digest);
 	free(curr);
+	pthread_mutex_unlock(m->lock);
 	return m;
 }
 
 manifest* updateManifest(manifest* m, char* filename)
 {
+	pthread_mutex_lock(m->lock);
 	int bucket = (getASCII(filename)) % 20;
 	file* ptr;
 	for(ptr = m->files[bucket]; ptr != NULL; ptr = ptr->next)
@@ -228,14 +235,17 @@ manifest* updateManifest(manifest* m, char* filename)
 			break;
 		}
 	}
+	pthread_mutex_unlock(m->lock);
 	return m;
 }
 
 manifest* insertToManifest(manifest* m, file* f)
 {
+	pthread_mutex_lock(m->lock);
 	int bucket = (getASCII(f->filename)) % 20;
 	f->next = m->files[bucket]; 
 	m->files[bucket] = f;
+	pthread_mutex_unlock(m->lock);
 	return m;
 }
 
@@ -280,6 +290,7 @@ node* readFile(char* file)
 
 manifest* loadManifest(char* manpath)
 {
+	
     node* list = readFile(manpath);
     if(list == NULL)
     {
@@ -287,6 +298,7 @@ manifest* loadManifest(char* manpath)
         return NULL;
     }   
     manifest* m = initManifest();
+	pthread_mutex_lock(m->lock);
     m->version = atoi(list->data);
     node* ver = list;
     list = list->next;
@@ -319,6 +331,7 @@ manifest* loadManifest(char* manpath)
     }
     free(temp);
     freeList(list);
+	pthread_mutex_unlock(m->lock);
     return m;
 }
 
@@ -366,6 +379,7 @@ void freeManifest(manifest* m)
 		}
 	}
     free(m->files);
+	pthread_mutex_destroy(m->lock);				//HMM
 	free(m);
 }
 
