@@ -648,7 +648,7 @@ void serv_upgrade(int client_sock)
 
 void* handle_connection(void* cs)
 {
-	int client_sock = *(int*)cs;
+	int client_sock = *((int*)cs);
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -708,13 +708,16 @@ int main(int argc, char** argv)
         return 0;
     }
     int client_sock;
-	
-	//while(1)
-	//{
-    client_sock = accept(serv_sock,NULL,NULL);
-	pthread_t tid;
-    pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
-	//}
+	while(1)
+	{
+	    client_sock = accept(serv_sock,NULL,NULL);
+		if(client_sock > 0)
+		{
+			pthread_t tid;
+   			pthread_create(&tid, NULL, handle_connection, &client_sock);
+		}else
+			perror("Accept failed: ");	//don't return since there can be other clients ??
+	}
     close(serv_sock);
     return 0;
 }
