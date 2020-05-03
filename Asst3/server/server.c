@@ -409,8 +409,9 @@ void serv_creat(int client_sock)
         write(client_sock,"1",1);
     else
     {
+        //send confirmation
         write(client_sock,"0",1);
-        char* path = myMalloc(512);
+        char* path = myMalloc(strlen(fileName)+13);
         sprintf(path,"./%s",fileName);
         mkdir(path,00777);
         strcat(path,"/.Manifest");
@@ -422,6 +423,14 @@ void serv_creat(int client_sock)
             free(path);
             return;
         }
+        write(fd,"0\n",2);
+        char* comm = myMalloc(strlen(fileName)+7);
+        sprintf(comm,"%s/commit",fileName);
+        mkdir(comm,00777);
+        free(comm);
+        char* hist = myMalloc(strlen(fileName)+5);
+        sprintf(hist,"%s/.data",fileName);
+        fd = open(hist,O_WRONLY|O_CREAT,00777);
         write(fd,"0\n",2);
         free(path);
         close(fd);
@@ -647,9 +656,158 @@ void serv_upgrade(int client_sock)
     free(man);
 }
 
-void* handle_connection(void* cs)
+node* readSocket(int socket)
 {
-	int client_sock = *((int*)cs);
+    char* c = myMalloc(sizeof(char));
+    node* head = NULL;                  //linked list of chars to create a token
+    node* temp;
+    node* list = NULL;                  //linked list of tokens from file
+    length = 0;
+    while(read(socket,c,1) > 0)
+    {
+        if(*c != '\t' && *c != '\n')
+        {
+            length+=1;
+            temp = initNode();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            list = addToList(list,head);
+            length=0;
+            freeList(head);
+            if(*c == '\t')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\t",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            else if(*c == '\n')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\n",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            head = NULL;
+        }
+    }
+    if(length > 0)
+        list = addToList(list,head);
+    freeList(head);
+    if(list == NULL)
+    {
+        printf("Error: socket is empty\n");
+        exit(1);
+    }
+    free(c);
+    return list;
+}
+
+void serv_commit(int client_sock)
+{
+    char* fileName = clientMessage(client_sock);
+    if(fileLookup(fileName))
+    {
+        char* buf = myMalloc(11+strlen(fileName));
+        sprintf(buf,"%s/.Manifest",fileName);
+        int fd = open(buf,O_RDONLY);
+        if(fd<0)
+        {
+            printf("Error: Could not find .Manifest for %s\n",fileName);
+            write(client_sock,"2",1);
+            free(fileName);
+            free(buf);
+            close(fd);
+            return;
+        }
+        manifest* man = loadManifest(buf);
+        free(buf);
+        if(man==NULL)
+        {
+            printf("Error: .Manifest is empty\n");
+            write(client_sock,"3",1);
+            return;
+        }
+        write(client_sock,"1",1);
+        int msg = 0;
+        //calculate msg length
+        char* ver = myMalloc(16);
+        sprintf(ver,"%d\n",man->version);
+        msg+=strlen(ver);
+        file* temp;
+        int i = 0;
+        for(i;i<20;i++)
+        {
+            temp = man->files[i];
+            if(temp!=NULL)
+            {
+                char* line = myMalloc(12 + strlen(temp->filename)+strlen(temp->digest));
+                sprintf(line,"%d\t%s\t%s\n",temp->version,temp->filename,temp->digest);
+                msg+=strlen(line);
+                free(line);
+                temp = temp->next;
+            }
+        }
+        char* msgsize = myMalloc(65);
+        sprintf(msgsize,"%d~",msg);
+        write(client_sock,msgsize,strlen(msgsize));
+        //actually write manifest out
+        write(client_sock,ver,strlen(ver));
+        free(ver);
+        i = 0;
+        for(i;i<20;i++)
+        {
+            temp = man->files[i];
+            if(temp!=NULL)
+            {
+                char* line = myMalloc(12 + strlen(temp->filename)+strlen(temp->digest));
+                sprintf(line,"%d\t%s\t%s\n",temp->version,temp->filename,temp->digest);
+                write(client_sock,line,strlen(line));
+                free(line);
+                temp = temp->next;
+            }
+        }
+        char* ans = myMalloc(1);
+        read(client_sock,ans,1);
+        if(atoi(ans)==1)
+        {
+            node* list = readSocket(client_sock);
+            if(list==NULL)
+            {
+                printf("Did not receive commit from client\n");
+                return;
+            }
+            node* ptr = list->next;
+            char* comfile = myMalloc(strlen(list->data)+strlen(fileName)+9);
+            sprintf(comfile,"%s/commit/%s",fileName,list->data);
+            fd = open(comfile,O_WRONLY|O_APPEND|O_CREAT,00777);
+            ptr = ptr->next;
+            while(ptr!=NULL)
+            {
+                write(fd,ptr->data,strlen(ptr->data));
+                ptr = ptr->next;
+            }
+            freeList(list);
+            free(comfile);
+            close(fd);
+        }
+    }
+    else
+        write(client_sock,"0",1);
+    free(fileName);
+    return;
+}
+
+void handle_connection(int client_sock)
+{
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -661,7 +819,7 @@ void* handle_connection(void* cs)
         serv_creat(client_sock);
     }else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
-    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0 || strcmp(flag,"COM")==0)
+    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0)
     {
         manifest* man = serv_ver(client_sock);
         if(man!=NULL)
@@ -671,6 +829,9 @@ void* handle_connection(void* cs)
         serv_check(client_sock);
     else if(strcmp(flag,"UPG")==0)
         serv_upgrade(client_sock);
+    else if(strcmp(flag,"COM")==0)
+        serv_commit(client_sock);
+        
     free(c);
     free(flag);
     close(client_sock);
@@ -702,7 +863,7 @@ int main(int argc, char** argv)
     int serv_sock;
     serv_sock = socket(AF_INET,SOCK_STREAM,0);
     int opt = 1;
-    setsockopt(serv_sock,SOL_SOCKET, SO_REUSEPORT,&opt,sizeof(opt));
+    setsockopt(serv_sock,SOL_SOCKET,SO_REUSEPORT,&opt,sizeof(opt));
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -722,16 +883,8 @@ int main(int argc, char** argv)
     int client_sock;
 	signal(SIGINT, sigHandler);
 	atexit(exiting);
-	while(1)
-	{
-	    client_sock = accept(serv_sock,NULL,NULL);
-		if(client_sock > 0)
-		{
-			pthread_t tid;
-   			pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
-		}else
-			perror("Accept failed: ");	//don't return since there can be other threads ?
-	}
+	client_sock = accept(serv_sock,NULL,NULL);
+    handle_connection(client_sock);
     close(serv_sock);
     return 0;
 }

@@ -391,6 +391,63 @@ node* readSocket(int socket)
     return list;
 }
 
+node* readSocketL(int socket,int size)
+{
+    char* c = myMalloc(sizeof(char));
+    int i = 0;
+    node* head = NULL;                  //linked list of chars to create a token
+    node* temp;
+    node* list = NULL;                  //linked list of tokens from file
+    length = 0;
+    while(read(socket,c,1) > 0 && i<size-1)
+    {
+        if(*c != '\t' && *c != '\n')
+        {
+            length+=1;
+            temp = initNode();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            list = addToList(list,head);
+            length=0;
+            freeList(head);
+            if(*c == '\t')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\t",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            else if(*c == '\n')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\n",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            head = NULL;
+        }
+        i++;
+    }
+    if(length > 0)
+        list = addToList(list,head);
+    freeList(head);
+    if(list == NULL)
+    {
+        printf("Error: socket is empty\n");
+        exit(1);
+    }
+    free(c);
+    return list;
+}
+
 int initSocket()
 {
     node* list = readFile(".configure");
@@ -1454,6 +1511,16 @@ int clientDifference(char* project, manifest* client, manifest* server)
     return c;
 }
 
+void writeFile(char* file, int client_sock)
+{
+    int fd = open(file,O_RDONLY);
+    write(client_sock,file,strlen(file));
+    write(client_sock,"\t",1);
+    char* c = myMalloc(1);
+    while(read(fd,c,1)>0)
+        write(client_sock,c,1);
+}
+
 void client_commit(char* project,int sock)
 {
     struct dirent* dp;
@@ -1497,7 +1564,17 @@ void client_commit(char* project,int sock)
         if(atoi(ans)==1)
         {
             //read manifest
-            node* list = readSocket(sock);
+            char* buff = myMalloc(64);
+            int c = 0;
+            while(read(sock,ans,1)>0)
+            {
+                if(*ans == '~')
+                    break;
+                memcpy(buff+c,ans,1);
+                c++;
+            }
+            int bytes = atoi(buff);
+            node* list = readSocketL(sock,bytes);
             node* ptr = list;
             manifest* serv_man = initManifest();
             serv_man->version = atoi(ptr->data);
@@ -1545,12 +1622,32 @@ void client_commit(char* project,int sock)
             }
             free(manPath);
             int x = clientDifference(project,cli_man,serv_man);
+            char* comm = myMalloc(strlen(project)+9);
+            sprintf(comm,"%s/.Commit",project);
             if(x)
             {
-                char* comm = myMalloc(strlen(project)+9);
-                sprintf(comm,"%s/.Commit",project);
                 remove(comm);
-                return;
+                // free(comm);
+                //tell server to not await a commit file
+                write(sock,"0",1);
+            }
+            else
+            {
+                //tell server commit is coming
+                write(sock,"1",1);
+                char* hash = getDigest(comm);
+                char* file = myMalloc(strlen(hash)+8);
+                sprintf(file,".Commit%s\t",hash);
+                //write .commit<hash> to tell apart different hashes
+                write(sock,file,strlen(file));
+                int fd = open(comm,O_RDONLY);
+                char* c = myMalloc(1);
+                while(read(fd,c,1)>0)
+                    write(sock,c,1);
+                free(file);
+                free(c);
+                close(fd);
+                // free(comm);
             }
         }
         else if(atoi(ans)==2)
@@ -1624,6 +1721,12 @@ int main(int argc, char** argv)
             client_commit(argv[2],net_sock);
             close(net_sock);
         }
+        // else if(strcmp(argv[1],"push")==0)
+        // {
+        //     int net_sock=initSocket();
+        //     client_push(argv[2],net_sock);
+        //     close(net_sock);
+        // }
         return 0;
     }
 }
