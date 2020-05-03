@@ -10,6 +10,8 @@
 #include <dirent.h>
 #include<openssl/sha.h>
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
 
 typedef struct node
 {
@@ -146,7 +148,7 @@ char* getDigest(char* file)
 }
 
 manifest* initManifest()
-{
+{	
 	manifest* temp = myMalloc(sizeof(manifest));
 	temp->version = 0;
 	temp->files = myMalloc(20*sizeof(file*));
@@ -235,7 +237,7 @@ manifest* insertToManifest(manifest* m, file* f)
 	int bucket = (getASCII(f->filename)) % 20;
 	f->next = m->files[bucket]; 
 	m->files[bucket] = f;
-	return m;
+	return m;	
 }
 
 node* readFile(char* file)
@@ -645,8 +647,9 @@ void serv_upgrade(int client_sock)
     free(man);
 }
 
-void handle_connection(int client_sock)
+void* handle_connection(void* cs)
 {
+	int client_sock = *((int*)cs);
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -654,8 +657,9 @@ void handle_connection(int client_sock)
     while(read(client_sock,c,1) > 0 && *c != '~')
         strcat(flag,c);
     if(strcmp(flag,"CRT")==0)
+	{
         serv_creat(client_sock);
-    else if(strcmp(flag,"DES")==0)
+    }else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
     else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0 || strcmp(flag,"COM")==0)
     {
@@ -670,6 +674,16 @@ void handle_connection(int client_sock)
     free(c);
     free(flag);
     close(client_sock);
+}
+void exiting()
+{
+	printf("terminated\n");
+	//add closes threads and stuff
+}
+
+void sigHandler(int signum)
+{
+	exit(1);
 }
 
 int main(int argc, char** argv)
@@ -706,8 +720,18 @@ int main(int argc, char** argv)
         return 0;
     }
     int client_sock;
-    client_sock = accept(serv_sock,NULL,NULL);
-    handle_connection(client_sock);
+	signal(SIGINT, sigHandler);
+	atexit(exiting);
+	while(1)
+	{
+	    client_sock = accept(serv_sock,NULL,NULL);
+		if(client_sock > 0)
+		{
+			pthread_t tid;
+   			pthread_create(&tid, NULL, handle_connection, (void*)&client_sock);
+		}else
+			perror("Accept failed: ");	//don't return since there can be other threads ?
+	}
     close(serv_sock);
     return 0;
 }

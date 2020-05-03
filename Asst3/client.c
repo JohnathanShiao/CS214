@@ -465,7 +465,7 @@ void client_creat(char* file,int sock)
         close(fd);
     }
     else
-        printf("The project alrady exists.\n");
+        printf("The project already exists.\n");
     free(buf);
     free(ans);
     return;
