@@ -110,8 +110,6 @@ char* getDigest(char* file)
 	{
   	  sprintf((char*)&(hash[i*2]), "%02x", tmphash[i]);
 	}
-    if(c!=NULL)
-	    free(c);
 	close(fd);
 	return hash;
 }
@@ -853,7 +851,7 @@ void client_check(char* project,int sock)
     return;
 }
 
-int manifestDifference(char* project, manifest* client, manifest* server)
+int serverDifference(char* project, manifest* client, manifest* server)
 {
     char* up = myMalloc(strlen(project)+9);
     sprintf(up,"%s/.Update",project);
@@ -889,7 +887,7 @@ int manifestDifference(char* project, manifest* client, manifest* server)
             char* line = myMalloc(strlen(stemp->filename)+strlen(stemp->digest)+10);
             sprintf(line,"A\t%d\t%s\t%s\n",stemp->version,stemp->filename,stemp->digest);
             write(wfd,line,strlen(line));
-            printf("A %s",stemp->filename);
+            printf("A %s\n",stemp->filename);
             free(line);
             stemp = stemp->next;
         }
@@ -899,7 +897,7 @@ int manifestDifference(char* project, manifest* client, manifest* server)
             char* line = myMalloc(strlen(ctemp->filename)+strlen(ctemp->digest)+10);
             sprintf(line,"D\t%d\t%s\t%s\n",ctemp->version,ctemp->filename,ctemp->digest);
             write(wfd,line,strlen(line));
-            printf("D %s",ctemp->filename);
+            printf("D %s\n",ctemp->filename);
             free(line);
             ctemp = ctemp->next;
         }
@@ -963,7 +961,7 @@ int manifestDifference(char* project, manifest* client, manifest* server)
                     char* line = myMalloc(strlen(cptr->filename)+strlen(cptr->digest)+20);
                     sprintf(line,"D\t%d\t%s\t%s\n",cptr->version,cptr->filename,cptr->digest);
                     write(wfd,line,strlen(line));
-                    printf("D %s",cptr->filename);
+                    printf("D %s\n",cptr->filename);
                     free(line);
                 }
                 cptr = cptr->next;
@@ -1071,7 +1069,7 @@ void client_update(char* project,int sock)
                 return;
             }
             free(manPath);
-            int x = manifestDifference(project,cli_man,serv_man);
+            int x = clientDifference(project,cli_man,serv_man);
             if(x)
             {
                 printf("Conflicts were found, please resolve before updating\n");
@@ -1305,7 +1303,7 @@ void client_upgrade(char* project,int sock)
             free(man);
         }
         else if(atoi(ans)==2)
-            printf("Error: Could not find a .Manifest for project %s. Aborting\n");
+            printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
         else if(atoi(ans)==3)
             printf("Error: Found .Manifest on server, but it was empty.\n");
         else
@@ -1314,6 +1312,257 @@ void client_upgrade(char* project,int sock)
     }
     else
         printf("Error: The project %s does not exist locally, cannot upgrade.\n",project);
+    return;
+}
+
+int clientDifference(char* project, manifest* client, manifest* server)
+{
+    char* com = myMalloc(strlen(project)+9);
+    sprintf(com,"%s/.Commit",project);
+    int wfd = open(com,O_WRONLY|O_APPEND|O_CREAT,00777);
+    if(wfd<0)
+    {
+        printf("Error: Could not create a Commit file\n");
+        free(com);
+        close(wfd);
+        return 1;
+    }
+    if(client->version != server->version)
+    {
+        printf("Error: Version mismatch, please upgrade the local project\n");
+        free(com);
+        close(wfd);
+        return 1;
+    }
+    int i = 0;
+    int c = 0;
+    file* ctemp;
+    file* stemp;
+    for(i;i<20;i++)
+    {
+        ctemp = client->files[i];
+        stemp = server->files[i];
+        //server has, client does not
+        while(ctemp == NULL && stemp!=NULL)
+        {
+            char* line = myMalloc(strlen(stemp->filename)+strlen(stemp->digest)+10);
+            sprintf(line,"D\t%d\t%s\t%s\n",stemp->version+1,stemp->filename,stemp->digest);
+            write(wfd,line,strlen(line));
+            printf("D %s\n",stemp->filename);
+            free(line);
+            stemp = stemp->next;
+        }
+        //server does not, client has
+        while(ctemp!=NULL && stemp == NULL)
+        {
+            char* line = myMalloc(strlen(ctemp->filename)+strlen(ctemp->digest)+10);
+            sprintf(line,"A\t%d\t%s\t%s\n",ctemp->version+1,ctemp->filename,ctemp->digest);
+            write(wfd,line,strlen(line));
+            printf("A %s\n",ctemp->filename);
+            free(line);
+            ctemp = ctemp->next;
+        }
+        //possible both have
+        if(ctemp!=NULL && stemp!=NULL)
+        {
+            file* cptr = ctemp;
+            file* sptr = stemp;
+            int exists = 0;
+            //check for modify and add
+            while(cptr != NULL)
+            {
+                while(sptr!=NULL)
+                {
+                    if(strcmp(cptr->filename,sptr->filename)==0)
+                    {
+                        exists = 1;
+                        break;
+                    }
+                    sptr=sptr->next;
+                }
+                if(exists)
+                {
+                    char* live_hash = getDigest(cptr->filename);
+                    //hash sored in both server and client is the same
+                    if(strcmp(sptr->digest,cptr->digest)==0)
+                    {
+                        //live hash is different from stored hash
+                        if(strcmp(cptr->digest,live_hash)!=0)
+                        {
+                            char* line = myMalloc(strlen(sptr->filename)+strlen(sptr->digest)+20);
+                            sprintf(line,"M\t%d\t%s\t%s\n",sptr->version+1,sptr->filename,sptr->digest);
+                            write(wfd,line,strlen(line));
+                            printf("M %s\n",cptr->filename);
+                            free(line);
+                        }
+                    }
+                    //server hash is different than client
+                    else
+                    {
+                        if(sptr->version>cptr->version)
+                        {
+                            printf("Error: %s on server is more recent, please synch project\n",cptr->filename);
+                            free(client);
+                            free(server);
+                            free(com);
+                            return 1;
+                        }
+                    }
+                    // free(live_hash);
+                }
+                else //write an add
+                {
+                    char* line = myMalloc(strlen(cptr->filename)+strlen(cptr->digest)+20);
+                    sprintf(line,"A\t%d\t%s\t%s\n",cptr->version+1,cptr->filename,cptr->digest);
+                    write(wfd,line,strlen(line));
+                    printf("A %s\n",cptr->filename);
+                    free(line);
+                }
+                cptr = cptr->next;
+                sptr = stemp;
+                exists = 0;
+            }
+            exists = 0;
+            sptr = stemp;
+            cptr = ctemp;
+            //check for removes
+            while(sptr!=NULL)
+            {
+                while(cptr!=NULL)
+                {
+                    if(strcmp(sptr->filename,cptr->filename)==0)
+                    {
+                        exists = 1;
+                        break;
+                    }
+                    cptr = cptr->next;
+                }
+                if(!exists)
+                {
+                    char* line = myMalloc(strlen(sptr->filename)+strlen(sptr->digest)+10);
+                    sprintf(line,"D\t%d\t%s\t%s\n",sptr->version,sptr->filename,sptr->digest);
+                    write(wfd,line,strlen(line));
+                    printf("D %s\n",sptr->filename);
+                    free(line);
+                }
+                sptr = sptr->next;
+                cptr = ctemp;
+                exists = 0;
+            }
+        }
+    }
+    return c;
+}
+
+void client_commit(char* project,int sock)
+{
+    struct dirent* dp;
+    DIR* dir = opendir(project);
+    //check if project exists
+    if(dir!=NULL)
+    {
+        char* con = myMalloc(strlen(project)+11);
+        sprintf(con,"%s/.Conflict",project);
+        int fd = open(con,O_RDONLY);
+        //check if conflict exists
+        if(fd>0)
+        {
+            printf("Error: Please resolve all conflicts and update\n");
+            free(con);
+            return;
+        }
+        free(con);
+        char* up = myMalloc(strlen(project)+9);
+        sprintf(up,"%s/.Update",project);
+        fd = open(up,O_RDONLY);
+        //check if update exists
+        if(fd>0)
+        {
+            //check if empty
+            node* update = readFile(up);
+            if(update!=NULL)
+            {
+                printf("Error: There are still pending updates, please upgrade\n");
+                free(up);
+                return;
+            }
+        }
+        free(up);
+        char* buf = myMalloc(300);
+        char* ans = myMalloc(1);
+        sprintf(buf,"COM~%d~%s",strlen(project),project);
+        write(sock,buf,strlen(buf));
+        free(buf);
+        read(sock,ans,1);
+        if(atoi(ans)==1)
+        {
+            //read manifest
+            node* list = readSocket(sock);
+            node* ptr = list;
+            manifest* serv_man = initManifest();
+            serv_man->version = atoi(ptr->data);
+            ptr = ptr->next;
+            int i = 1;
+            file* temp = initFile();
+            //load up server manifest
+            while(ptr!=NULL)
+            {
+                if(strcmp(ptr->data,"\t")!=0 && strcmp(ptr->data,"\n")!=0)
+                {
+                    if(i%3==0)
+                    {
+                        temp->digest = myMalloc(strlen(ptr->data)+1);
+                        memcpy(temp->digest,ptr->data,strlen(ptr->data));
+                        serv_man = insertToManifest(serv_man,temp);
+                        temp = initFile();
+                        i-=2;
+                    }
+                    else
+                    {
+                        if(i%2==0)
+                        {
+                            temp->filename = myMalloc(strlen(ptr->data)+1);
+                            memcpy(temp->filename,ptr->data,strlen(ptr->data));
+                        }
+                        else
+                            temp->version = atoi(ptr->data);
+                        i++;
+                    }
+                }
+                ptr = ptr->next;
+            }
+            if(temp->filename == NULL)
+                free(temp);
+            char* manPath = myMalloc(strlen(project)+11);
+            sprintf(manPath,"%s/.Manifest",project);
+            manifest* cli_man = loadManifest(manPath);
+            if(cli_man == NULL)
+            {
+                printf("Error: local manifest is empty\n");
+                free(manPath);
+                free(ans);
+                return;
+            }
+            free(manPath);
+            int x = clientDifference(project,cli_man,serv_man);
+            if(x)
+            {
+                char* comm = myMalloc(strlen(project)+9);
+                sprintf(comm,"%s/.Commit",project);
+                remove(comm);
+                return;
+            }
+        }
+        else if(atoi(ans)==2)
+            printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
+        else if(atoi(ans)==3)
+            printf("Error: Found .Manifest on server, but it was empty.\n");
+        else
+            printf("Error: The project %s does not exist on the server.\n",project);
+        free(ans);
+    }
+    else
+        printf("Error: The project %s does not exist locally, cannot commit.\n",project);
     return;
 }
 
@@ -1367,6 +1616,12 @@ int main(int argc, char** argv)
         {
             int net_sock = initSocket();
             client_upgrade(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"commit")==0)
+        {
+            int net_sock=initSocket();
+            client_commit(argv[2],net_sock);
             close(net_sock);
         }
         return 0;

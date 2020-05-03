@@ -657,7 +657,7 @@ void handle_connection(int client_sock)
         serv_creat(client_sock);
     else if(strcmp(flag,"DES")==0)
         serv_del(client_sock);
-    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0)
+    else if(strcmp(flag,"VER")==0 || strcmp(flag,"UPD")==0 || strcmp(flag,"COM")==0)
     {
         manifest* man = serv_ver(client_sock);
         if(man!=NULL)
