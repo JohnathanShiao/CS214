@@ -11,6 +11,7 @@
 #include<openssl/sha.h>
 #include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 
 typedef struct node
 {
@@ -674,6 +675,16 @@ void* handle_connection(void* cs)
     free(flag);
     close(client_sock);
 }
+void exiting()
+{
+	printf("terminated\n");
+	//add closes threads and stuff
+}
+
+void sigHandler(int signum)
+{
+	exit(1);
+}
 
 int main(int argc, char** argv)
 {
@@ -709,6 +720,8 @@ int main(int argc, char** argv)
         return 0;
     }
     int client_sock;
+	signal(SIGINT, sigHandler);
+	atexit(exiting);
 	while(1)
 	{
 	    client_sock = accept(serv_sock,NULL,NULL);
