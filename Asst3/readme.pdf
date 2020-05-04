@@ -22,6 +22,10 @@ o   updateManifest() updates the digest by calling getDigest on the file given t
 o   insertToManifest() inserts a file to the manifest's hash table of files
 o   loadManifest() creates a manifest struct given a manifest file
 o   freeManifest() frees the given manifest struct
+
+Note: .Commit and .Update will be used along with .Manifest to keep track of the projects' progression.
+-Every file whose live hash is different than the stored hash saved in the client's local .Manifest should have an entry written out to a .Commit with its file version number incremented.
+-.Update file records all those changes that need to be made to bring up the client's files to the same version as the server's.
 -------------------------------------------------------------------------------------------------
 Procedure:
 
@@ -77,11 +81,25 @@ The function will first check if the project exists on the server, and if if doe
 -------------------------------------------------------------------------------------------------
 Multithreading:
 -As the server should be able to handle multiple clients at a time, we implemented multithreading. The threads' creation occurs in the server.c file.
--We have a handle_connection function that deals with the client's message (which is the command they request from the server), and initially we implemented a top-bottom design for only a single client. The server accepts the client and then the client descriptor is passed to the handle_connection, where the server figures of the command desired and executes it for the client and then sends back a confirmation to the client on whether it was successful or unsuccessful.
-- This implementation of the connection handler makes multithreading simple. Upon accept of one client, we create a thread to deal with it, and then go back to accepting the next client... and so on.
--The handle_connection function is a void*/void* function, so we can use pthread_create() to create a thread to deal with whichever client.
+-We have a handle_connection function that deals with the client's message (which is the command they request from the server), and initially we implemented a top-bottom design for only a single client. The server accepts the client, and then the client descriptor is passed to the handle_connection, where the server figures out the command desired and executes it for the client and then sends back a confirmation to the client on whether it was successful or unsuccessful.
+- This implementation of the connection handler makes multithreading simple. Upon accept of one client, we create a thread to deal with it, and then go back to accepting the next client... and so on. Since we don't know how many clients there will be, this process occurs within a while(1) loop, so sigint is required to terminate the server.
+Note: We have created a signal handler for SIGINT, so we are able to nicely shut down all threads, close all sockets and file descriptors and free() all memory before allowing the process to terminate.
+-The handle_connection function is a void*/void* function, so we can use pthread_create() to create a thread to deal with whichever client that is accepted.
  
 -------------------------------------------------------------------------------------------------
 Thread Synchronization:
--Since there can be multiple clients (i.e. multiple threads) on the server at once, the program will create a mutex for each project to control access to them. The mutexes will be maintained in a linked list... (MORE TO COME)
- 
+-Since there can be multiple clients (i.e. multiple threads) on the server at once, the program will create a mutex for each project to control access to them.
+-We made a mutex struct that has the fields: char* projectName, pthread_t* lock, and mutex* next. This allows us to have a global linked list of all the available projects on the server that can be accessed by all the threads. There is one mutex struct per project.
+-The global linked list of mutexes is maintained as follows:
+-With every creation of a project (client code CRT), the program will initialize and then add the mutex struct to the global linked list using initMutex() and mutex_creat().
+-When destorying a project (client code DES), the program will remove the mutex struct associated with the project (based on mutex->name is equivalent to the project name) from the global linked list using mutex_del().
+-When a thread needs to modify a project in any way, this is considered a critical section. The mutex for the project must be locked to prevent any other threads from accessing the project. Additionally, it needs to be unlocked immediately after modification to the project is completed to allow the next thread to access the newly modified project. This will ensure synchronization of the projects' contents.
+-This will be accomplished utilizing the function getMutex() which takes in the char* for the project's name and returns a pointer to the corresponding mutex. Once the function has the mutex struct pointer, the program can lock the project, make modifcations, and then unlock it.
+-An example: the wanted project to modify is called "test"
+mutex* project = getMutex("test");
+pthread_mutex_lock(project->lock);
+----------
+modification to project test
+----------
+pthread_mutex_unlock(project->lock);
+-Upon exit, any mutexes ("projects left on the server") that still exist will be freed since the function freeMutexes() is in the atexit() signal. 
