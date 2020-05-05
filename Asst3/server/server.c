@@ -183,7 +183,6 @@ void createManifestFile(manifest* m,char* path)
             temp = temp->next;
 		}
 	}
-	free(buf);
 	close(wfd);
 }
 
@@ -289,10 +288,7 @@ manifest* loadManifest(char* manpath)
     }   
     manifest* m = initManifest();
     m->version = atoi(list->data);
-    node* ver = list;
-    list = list->next;
-    free(ver);
-    node* ptr = list;
+    node* ptr = list->next;
     file* temp = initFile();
     int i = 1;
     while(ptr!=NULL)
@@ -301,7 +297,7 @@ manifest* loadManifest(char* manpath)
         {
             temp->digest = myMalloc(strlen(ptr->data)+1);
             memcpy(temp->digest,ptr->data,strlen(ptr->data)+1);
-            insertToManifest(m,temp);
+            m = insertToManifest(m,temp);
             temp = initFile();
             i-=2;
         }
@@ -398,6 +394,42 @@ int fileLookup(char* file)
     }
     free(dir);
     return 0;
+}
+
+int mkdirr(char* p,int mode,int fail_on_exist)
+{
+    int result = 0;
+    char* path = myMalloc(strlen(p)+1);
+    memcpy(path,p,strlen(p));
+    char * dir = NULL;
+    do
+    {
+        if (path == NULL)
+        {
+            result = -1;
+            break;
+        }
+        //try to chop off last directory
+        if ((dir = strrchr(path, '/'))) 
+        {
+            *dir = '\0';
+            result = mkdirr(path, mode,fail_on_exist);
+            *dir = '/';
+            if (result)
+                break;
+        }
+        if (strlen(path))
+        {
+            if ((result = mkdir(path, mode)))
+            {
+                if(EEXIST==errno && fail_on_exist==0)
+                    result=0;
+            }
+        }
+    } while (0);
+    if(path)
+        free(path);
+    return result;
 }
 
 void serv_creat(int client_sock)
@@ -711,6 +743,65 @@ node* readSocket(int socket)
     return list;
 }
 
+node* readSocketL(int socket,int size)
+{
+    char* c = myMalloc(sizeof(char));
+    int i = 0;
+    node* head = NULL;                  //linked list of chars to create a token
+    node* temp;
+    node* list = NULL;                  //linked list of tokens from file
+    length = 0;
+    while(read(socket,c,1) > 0)
+    {
+        if(*c != '\t' && *c != '\n')
+        {
+            length+=1;
+            temp = initNode();
+            temp->data = myMalloc(sizeof(char));
+            memcpy(temp->data,c,1);
+            head = insert(head,temp);
+        }
+        else
+        {
+            list = addToList(list,head);
+            length=0;
+            freeList(head);
+            if(*c == '\t')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\t",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            else if(*c == '\n')
+            {
+                length = 1;
+                temp = initNode();
+                temp->data = myMalloc(1);
+                memcpy(temp->data,"\n",1);
+                list = addToList(list,temp);
+                length = 0;
+            }
+            head = NULL;
+        }
+        i++;
+        if(i==size)
+            break;
+    }
+    if(length > 0)
+        list = addToList(list,head);
+    freeList(head);
+    if(list == NULL)
+    {
+        printf("Error: socket is empty\n");
+        exit(1);
+    }
+    free(c);
+    return list;
+}
+
 void serv_commit(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
@@ -747,7 +838,7 @@ void serv_commit(int client_sock)
         for(i;i<20;i++)
         {
             temp = man->files[i];
-            if(temp!=NULL)
+            while(temp!=NULL)
             {
                 char* line = myMalloc(12 + strlen(temp->filename)+strlen(temp->digest));
                 sprintf(line,"%d\t%s\t%s\n",temp->version,temp->filename,temp->digest);
@@ -756,7 +847,7 @@ void serv_commit(int client_sock)
                 temp = temp->next;
             }
         }
-        char* msgsize = myMalloc(65);
+        char* msgsize = myMalloc(100);
         sprintf(msgsize,"%d~",msg);
         write(client_sock,msgsize,strlen(msgsize));
         //actually write manifest out
@@ -766,7 +857,7 @@ void serv_commit(int client_sock)
         for(i;i<20;i++)
         {
             temp = man->files[i];
-            if(temp!=NULL)
+            while(temp!=NULL)
             {
                 char* line = myMalloc(12 + strlen(temp->filename)+strlen(temp->digest));
                 sprintf(line,"%d\t%s\t%s\n",temp->version,temp->filename,temp->digest);
@@ -788,6 +879,9 @@ void serv_commit(int client_sock)
             node* ptr = list->next;
             char* comfile = myMalloc(strlen(list->data)+strlen(fileName)+9);
             sprintf(comfile,"%s/commit/%s",fileName,list->data);
+            fd = open(comfile,O_WRONLY|O_APPEND);
+            if(fd>0)
+                return;
             fd = open(comfile,O_WRONLY|O_APPEND|O_CREAT,00777);
             ptr = ptr->next;
             while(ptr!=NULL)
@@ -799,6 +893,305 @@ void serv_commit(int client_sock)
             free(comfile);
             close(fd);
         }
+    }
+    else
+        write(client_sock,"0",1);
+    free(fileName);
+    return;
+}
+
+void expire(char* project)
+{
+    char* commit = myMalloc(strlen(project)+10);
+    sprintf(commit,"%s/commit",project);
+    //open commit folder
+    DIR* dir = opendir(commit);
+    struct dirent* dp;
+    if(dir!=NULL)
+    {
+        dp = readdir(dir);
+        dp = readdir(dir);
+        dp = readdir(dir);
+        //delete everything all commits even the one given because it is already loaded
+        while(dp!=NULL)
+        {
+            char* del = myMalloc(strlen(commit)+50);
+            sprintf(del,"%s/%s",commit,dp->d_name);
+            remove(del);
+            free(del);
+            dp = readdir(dir);
+        }
+    }
+    else
+    {
+        printf("Error: There is no commit folder for this project, please create one\n");
+        return;
+    }
+}
+
+void serv_push(int client_sock)
+{
+    char* fileName = clientMessage(client_sock);
+    if(fileLookup(fileName))
+    {
+        //tell client project exists
+        write(client_sock,"1",1);
+        //find how long files will be
+        char* buff = myMalloc(100);
+        char* rd = myMalloc(1);
+        int c = 0;
+        while(read(client_sock,rd,1)>0)
+        {
+            if(*rd == '~')
+                break;
+            memcpy(buff+c,rd,1);
+            c++;
+        }
+        int bytes = atoi(buff);
+        node* files = readSocketL(client_sock,bytes);
+        if(files==NULL)
+        {
+            printf("Error: Did not receive .Commit");
+            free(fileName);
+            return;
+        }
+        //check for already existing commit
+        char* com = myMalloc(strlen(files->data)+1);
+        memcpy(com,files->data,strlen(files->data));
+        int fd = open(com,O_RDONLY);
+        if(fd<0)
+        {
+            printf("Error: Could not find a similar .Commit, client must run commit first\n");
+            write(client_sock,"4",1);
+            free(com);
+            free(fileName);
+            freeList(files);
+            return;
+        }
+        //load up commit here to avoid copying to old 
+        node* commit = readFile(com);
+        if(commit == NULL)
+        {
+            printf("Error: Something went wrong reading from commit\n");
+            free(com);
+            free(fileName);
+            free(files);
+            return;
+        }
+        //expire all other commits
+        expire(fileName);
+        //check if manifest exists
+        char* manPath = myMalloc(strlen(fileName)+11);
+        sprintf(manPath,"%s/.Manifest",fileName);
+        fd = open(manPath,O_RDONLY);
+        if(fd<0)
+        {
+            write(client_sock,"2",1);
+            free(manPath);
+            free(com);
+            freeList(files);
+            free(commit);
+            return;
+        }
+        manifest* man = loadManifest(manPath);
+        if(man==NULL)
+        {
+            write(client_sock,"3",1);
+            free(manPath);
+            free(com);
+            freeList(files);
+            return;
+        }
+        int failure = 0;
+        //make temp folder to hold old version
+        char* dupe = myMalloc(strlen(fileName)+5);
+        sprintf(dupe,"%stemp",fileName);
+        if(mkdir(dupe,00777)<0)
+        {
+            printf("Error: Could not create a duplicate directory");
+            write(client_sock,"1",1);
+            freeList(files);
+            free(dupe);
+            free(com);
+            close(fd);
+            return;
+        }
+        char* cpy = myMalloc((2*strlen(fileName))+20);
+        //copy to this temp folder
+        sprintf(cpy,"cp -r %s %stemp",fileName,fileName);
+        system(cpy);
+        free(cpy);
+        //traverse commit file
+        node* cptr = commit;
+        while(cptr!=NULL)
+        {
+            if(strcmp(cptr->data,"A")==0)
+            {
+                file* temp = initFile();
+                cptr= cptr->next;
+                temp->version = atoi(cptr->data);
+                cptr = cptr->next;
+                temp->filename = myMalloc(strlen(cptr->data)+1);
+                memcpy(temp->filename,cptr->data,strlen(cptr->data));
+                cptr = cptr->next;
+                temp->digest = myMalloc(strlen(cptr->data)+1);
+                memcpy(temp->digest,cptr->data,strlen(cptr->data));
+                man = insertToManifest(man,temp);
+                //no guarantee path exists, create it
+                char* path = myMalloc(strlen(temp->filename)+1);
+                memcpy(path,temp->filename,strlen(temp->filename));
+                char* cut = strrchr(path,'/');
+                *cut = '\0';
+                if(mkdirr(path,00777,0) == -1)
+                {
+                    printf("Could not create path %s",path);
+                    failure = 1;
+                }
+                else
+                {
+                    *cut = '/';
+                    //create file
+                    int wfd = open(path,O_WRONLY|O_APPEND|O_CREAT,00777);
+                    if(wfd<0)
+                    {
+                        printf("Error: Could not create file according to path %s",path);
+                        failure = 1;
+                    }
+                    //skip commit hash
+                    node* fptr = files->next;
+                    //fill with new data
+                    while(fptr!=NULL)
+                    {
+                        if(strcmp(fptr->data, temp->filename)==0)
+                        {
+                            //skip the tab after filenames
+                            fptr = fptr->next;
+                            fptr = fptr->next;
+                            while(fd=open(fptr->data,O_WRONLY|O_APPEND)<0)
+                            {
+                                write(wfd,fptr->data,strlen(fptr->data));
+                                fptr = fptr->next;
+                                if(fptr==NULL)
+                                    break;
+                            }
+                        }
+                        if(fptr==NULL)
+                            break;
+                        fptr=fptr->next;
+                    }
+                }
+            }
+            else if(strcmp(cptr->data,"M")==0)
+            {
+                //create the new file
+                file* temp = initFile();
+                cptr = cptr->next;
+                temp->version = atoi(cptr->data);
+                cptr=cptr->next;
+                temp->filename = myMalloc(strlen(cptr->data)+1);
+                memcpy(temp->filename,cptr->data,strlen(cptr->data));
+                cptr=cptr->next;
+                temp->digest = myMalloc(strlen(cptr->data)+1);
+                memcpy(temp->digest,cptr->data,strlen(cptr->data));
+                //remove local version
+                remove(temp->filename);
+                //remove manifest entry
+                man = deleteFromManifest(man,temp->filename);
+                //replace manifest entry
+                man = insertToManifest(man,temp);
+                //create empty new version
+                int wfd = open(temp->filename,O_WRONLY|O_APPEND|O_CREAT,00777);
+                if(wfd<0)
+                {
+                    printf("Error: Could not create file according to path %s",temp->filename);
+                    failure = 1;
+                }
+                node* fptr = files;
+                //fill with new data
+                while(fptr!=NULL)
+                {
+                    if(strcmp(fptr->data, temp->filename)==0)
+                    {
+                        fptr = fptr->next;
+                        fptr = fptr->next;
+                        while(fd=open(fptr->data,O_WRONLY|O_APPEND)<0)
+                        {
+                            write(wfd,fptr->data,strlen(fptr->data));
+                            fptr = fptr->next;
+                            if(fptr==NULL)
+                                break;
+                        }
+                    }
+                    if(fptr==NULL)
+                        break;
+                    fptr=fptr->next;
+                }
+            }
+            else if(strcmp(cptr->data,"D")==0)
+            {
+                cptr = cptr->next;
+                cptr = cptr->next;
+                man = deleteFromManifest(man,cptr->data);
+                char* path = myMalloc(strlen(cptr->data)+1);
+                memcpy(path,cptr->data,strlen(cptr->data));
+                if(remove(path)<0)
+                    failure = 1;
+            }
+            cptr = cptr->next;
+        }
+        if(failure)
+        {
+            remove(fileName);
+            char* move = myMalloc((2*strlen(fileName))+50);
+            sprintf(move,"mv %stemp/%s .",fileName,fileName);
+            system(move);
+            free(move);
+            remove(dupe);
+            write(client_sock,"1",1);
+        }
+        else
+        {
+            //move the old version into .data
+            char* rename = myMalloc((2*strlen(fileName))+50);
+            sprintf(rename,"mv %stemp/%s %s/.data/%s%d",fileName,fileName,fileName,fileName,man->version);
+            system(rename);
+            free(rename);
+            remove(dupe);
+            //write the commits into history
+            char* his = myMalloc(strlen(fileName)+10);
+            sprintf(his,"%s/.history",fileName);
+            int wfd = open(his,O_WRONLY|O_APPEND);
+            free(his);
+            char* version = myMalloc(16);
+            sprintf(version,"%d\n",man->version);
+            write(wfd,version,strlen(version));
+            cptr = commit;
+            int f = 1;
+            while(cptr!=NULL)
+            {
+                write(wfd,cptr->data,strlen(cptr->data));
+                if(f%4==0)
+                {
+                    write(wfd,"\n",1);
+                    f-=3;
+                }
+                else
+                {
+                    write(wfd,"\t",1);
+                    f++;
+                }
+                cptr = cptr->next;
+            }
+            //increase manifest version#
+            man->version+=1;
+            //replace manifest
+            createManifestFile(man,manPath);
+            write(client_sock,"0",1);
+        }
+        freeList(files);
+        freeList(commit);
+        free(manPath);
+        freeManifest(man);
     }
     else
         write(client_sock,"0",1);
@@ -831,7 +1224,8 @@ void handle_connection(int client_sock)
         serv_upgrade(client_sock);
     else if(strcmp(flag,"COM")==0)
         serv_commit(client_sock);
-        
+    else if(strcmp(flag,"PSH")==0)
+        serv_push(client_sock);
     free(c);
     free(flag);
     close(client_sock);

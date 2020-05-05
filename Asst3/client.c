@@ -399,7 +399,7 @@ node* readSocketL(int socket,int size)
     node* temp;
     node* list = NULL;                  //linked list of tokens from file
     length = 0;
-    while(read(socket,c,1) > 0 && i<size-1)
+    while(read(socket,c,1) > 0)
     {
         if(*c != '\t' && *c != '\n')
         {
@@ -435,6 +435,8 @@ node* readSocketL(int socket,int size)
             head = NULL;
         }
         i++;
+        if(i==size)
+            break;
     }
     if(length > 0)
         list = addToList(list,head);
@@ -616,9 +618,9 @@ void add(char* project,char* file)
     }
 }
 
-manifest* loadManifest(char* manpath)
+manifest* loadManifest(char* manPath)
 {
-    node* list = readFile(manpath);
+    node* list = readFile(manPath);
     if(list == NULL)
         return NULL;
     manifest* m = initManifest();
@@ -1186,7 +1188,6 @@ int recurse_del(char* file)
 
 void client_upgrade(char* project,int sock)
 {
-    struct dirent* dp;
     DIR* dir = opendir(project);
     //check if project exists
     if(dir!=NULL)
@@ -1408,6 +1409,7 @@ int clientDifference(char* project, manifest* client, manifest* server)
             printf("D %s\n",stemp->filename);
             free(line);
             stemp = stemp->next;
+            c=0;
         }
         //server does not, client has
         while(ctemp!=NULL && stemp == NULL)
@@ -1418,6 +1420,7 @@ int clientDifference(char* project, manifest* client, manifest* server)
             printf("A %s\n",ctemp->filename);
             free(line);
             ctemp = ctemp->next;
+            c=0;
         }
         //possible both have
         if(ctemp!=NULL && stemp!=NULL)
@@ -1446,12 +1449,15 @@ int clientDifference(char* project, manifest* client, manifest* server)
                         //live hash is different from stored hash
                         if(strcmp(cptr->digest,live_hash)!=0)
                         {
-                            char* line = myMalloc(strlen(sptr->filename)+strlen(sptr->digest)+20);
-                            sprintf(line,"M\t%d\t%s\t%s\n",sptr->version+1,sptr->filename,sptr->digest);
+                            char* line = myMalloc(strlen(sptr->filename)+strlen(live_hash)+20);
+                            sprintf(line,"M\t%d\t%s\t%s\n",sptr->version+1,sptr->filename,live_hash);
                             write(wfd,line,strlen(line));
                             printf("M %s\n",cptr->filename);
                             free(line);
+                            c=0;
                         }
+                        else
+                            c=1;
                     }
                     //server hash is different than client
                     else
@@ -1467,13 +1473,14 @@ int clientDifference(char* project, manifest* client, manifest* server)
                     }
                     // free(live_hash);
                 }
-                else //write an add
+                else //write a delete
                 {
                     char* line = myMalloc(strlen(cptr->filename)+strlen(cptr->digest)+20);
                     sprintf(line,"A\t%d\t%s\t%s\n",cptr->version+1,cptr->filename,cptr->digest);
                     write(wfd,line,strlen(line));
                     printf("A %s\n",cptr->filename);
                     free(line);
+                    c=0;
                 }
                 cptr = cptr->next;
                 sptr = stemp;
@@ -1501,6 +1508,7 @@ int clientDifference(char* project, manifest* client, manifest* server)
                     write(wfd,line,strlen(line));
                     printf("D %s\n",sptr->filename);
                     free(line);
+                    c=0;
                 }
                 sptr = sptr->next;
                 cptr = ctemp;
@@ -1523,7 +1531,6 @@ void writeFile(char* file, int client_sock)
 
 void client_commit(char* project,int sock)
 {
-    struct dirent* dp;
     DIR* dir = opendir(project);
     //check if project exists
     if(dir!=NULL)
@@ -1563,9 +1570,10 @@ void client_commit(char* project,int sock)
         read(sock,ans,1);
         if(atoi(ans)==1)
         {
-            //read manifest
+            //read server manifest
             char* buff = myMalloc(64);
             int c = 0;
+            //get length of message
             while(read(sock,ans,1)>0)
             {
                 if(*ans == '~')
@@ -1574,6 +1582,7 @@ void client_commit(char* project,int sock)
                 c++;
             }
             int bytes = atoi(buff);
+            //read messsage
             node* list = readSocketL(sock,bytes);
             node* ptr = list;
             manifest* serv_man = initManifest();
@@ -1608,6 +1617,7 @@ void client_commit(char* project,int sock)
                 }
                 ptr = ptr->next;
             }
+            //end on an init, gotta free allocated space
             if(temp->filename == NULL)
                 free(temp);
             char* manPath = myMalloc(strlen(project)+11);
@@ -1627,6 +1637,7 @@ void client_commit(char* project,int sock)
             if(x)
             {
                 remove(comm);
+                printf("Nothing to commit, Up To Date\n");
                 // free(comm);
                 //tell server to not await a commit file
                 write(sock,"0",1);
@@ -1663,6 +1674,145 @@ void client_commit(char* project,int sock)
     return;
 }
 
+void client_push(char* project,int sock)
+{
+    DIR* dir = opendir(project);
+    //check if project exists
+    if(dir!=NULL)
+    {
+        char* com = myMalloc(strlen(project)+11);
+        sprintf(com,"%s/.Commit",project);
+        int fd = open(com,O_RDONLY);
+        //check if commit exists
+        if(fd<0)
+        {
+            printf("Error: There is no .Commit file, please run commit\n");
+            free(com);
+            return;
+        }
+        char* buf = myMalloc(300);
+        char* ans = myMalloc(1);
+        sprintf(buf,"PSH~%d~%s",strlen(project),project);
+        write(sock,buf,strlen(buf));
+        free(buf);
+        read(sock,ans,1);
+        //project exists on server
+        if(atoi(ans)==1)
+        {
+            int msg = 0;
+            //load up commit
+            node* commit = readFile(com);
+            if(commit==NULL)
+            {
+                printf("Error: .Commit is empty\n");
+                free(ans);
+                return;
+            }
+            //hash the commit to check for duplicate
+            char* hash = myMalloc(strlen(project)+100);
+            sprintf(hash,"%s/commit/.Commit%s\t",project,getDigest(com));
+            //add length of hash
+            msg+=strlen(hash);
+            //find size of incoming message
+            node* cptr = commit;
+            while(cptr!=NULL)
+            {
+                if(strcmp(cptr->data,"A")==0 || strcmp(cptr->data,"M")==0)
+                {
+                    //skip operation
+                    cptr = cptr->next;
+                    //skip version
+                    cptr = cptr->next;
+                    //add filename and tab
+                    msg+=strlen(cptr->data)+1;
+                    char* r = myMalloc(1);
+                    int fd = open(cptr->data,O_RDONLY);
+                    while(read(fd,r,1)>0)
+                        msg++;
+                    free(r);
+                }
+                cptr = cptr->next;
+            }
+            char* msgsize = myMalloc(100);
+            sprintf(msgsize,"%d~",msg);
+            write(sock,msgsize,strlen(msgsize));
+            //now write out file hash and files
+            write(sock,hash,strlen(hash));
+            free(hash);
+            cptr = commit;
+            while(cptr!=NULL)
+            {
+                if(strcmp(cptr->data,"A")==0 || strcmp(cptr->data,"M")==0)
+                {
+                    //skip version
+                    cptr = cptr->next;
+                    cptr = cptr->next;
+                    //if file exists send it
+                    if((fd = open(cptr->data,O_RDONLY)>0))
+                        writeFile(cptr->data,sock);
+                }
+                cptr = cptr->next;
+            }
+            read(sock,ans,1);
+            //failure check
+            if(atoi(ans)==0)
+            {
+                //success, so modify client manifest
+                char* manPath = myMalloc(strlen(project)+11);
+                sprintf(manPath,"%s/.Manifest",project);
+                manifest* man = loadManifest(manPath);
+                cptr = commit;
+                file* temp;
+                while(cptr!=NULL)
+                {
+                    //dont care about A or D because those changes
+                    //already exist for them to be able to be committed
+                    if(strcmp(cptr->data,"M")==0)
+                    {
+                        //create a temp
+                        temp = initFile();
+                        cptr = cptr->next;
+                        temp->version = atoi(cptr->data);
+                        cptr = cptr->next;
+                        temp->filename = myMalloc(strlen(cptr->data)+1);
+                        memcpy(temp->filename,cptr->data,strlen(cptr->data));
+                        cptr = cptr->next;
+                        temp->digest = myMalloc(strlen(cptr->data)+1);
+                        memcpy(temp->digest,cptr->data,strlen(cptr->data));
+                        //delete old version
+                        man = deleteFromManifest(man,temp->filename);
+                        //insert the new
+                        man = insertToManifest(man,temp);
+                    }
+                    cptr = cptr->next;
+                }
+                //increment manifest
+                man->version+=1;
+                //create new manifest
+                createManifestFile(man,manPath);
+                free(manPath);
+                freeManifest(man);
+            }
+            else if(atoi(ans)==2)
+                printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
+            else if(atoi(ans)==3)
+                printf("Error: Found .Manifest on server, but it was empty.\n");
+            else if(atoi(ans)==4)
+                printf("Error: Server does not have a corresponding .Commit, please run commit\n");
+            else
+                printf("Error: Something went wrong serverside, please check server terminal\n");
+            remove(com);
+            free(ans);
+            free(com);
+        }
+        else
+            printf("Error: The project %s does not exist on the server.\n",project);
+        free(ans);
+    }
+    else
+        printf("Error: The project %s does not exist locally, cannot commit.\n",project);
+    return;
+}
 int main(int argc, char** argv)
 {
     if(argc == 4)
@@ -1673,7 +1823,6 @@ int main(int argc, char** argv)
             add(argv[2],argv[3]);
         else if(strcmp(argv[1],"remove")==0)
             rem(argv[2],argv[3]);
-        return 0;
     }
     else if(argc == 3)
     {
@@ -1717,16 +1866,18 @@ int main(int argc, char** argv)
         }
         else if(strcmp(argv[1],"commit")==0)
         {
-            int net_sock=initSocket();
+            int net_sock = initSocket();
             client_commit(argv[2],net_sock);
             close(net_sock);
         }
-        // else if(strcmp(argv[1],"push")==0)
-        // {
-        //     int net_sock=initSocket();
-        //     client_push(argv[2],net_sock);
-        //     close(net_sock);
-        // }
-        return 0;
+        else if(strcmp(argv[1],"push")==0)
+        {
+            int net_sock = initSocket();
+            client_push(argv[2],net_sock);
+            close(net_sock);
+        }
     }
+    else
+        printf("Error: Expected at least 2 arguments, received %d",argc);
+    return 0;
 }
