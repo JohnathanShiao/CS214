@@ -4,8 +4,45 @@ ml1417
 Test Cases:
 
 1)	./WTFserver
-	Error: expected 2 arguments, received 1
+	Output:	"Error: expected 2 arguments, received 1"
 
 2)	./WTFserver 1
-	Error: 1 is not a valid port
+	Output: "Error: 1 is not a valid port"
+
+3) 	./WTFserver 2020
+	./WTF configure <hostname> 2020
+	./WTF create test				
+	Output:	"Finished writing to socket." //CLIENT CONNECT TO SERVER
+			"Server: New client accepted."
+			"Project test was created."	ACCOUNT FOR MORE PRINT STATEMENTS
+
+4)	./WTFserver 2020 (note: server will be already running)
+	./WTF configure <hostname> 2021
+	./WTF create test2
+	Output: "Client: Could not connect to server: Connection refused"
+
+
+5)	./WTFserver 2020 (note: server will be already running)
+	./WTF configure <hostname> 2020
+	./WTF create test
+	Output: "Finished writing to socket" //CLIENT CONNECT TO SERVER
+			"Server: New Client accepted."
+			"The project already exists."
+
+6)	./WTFserver 2020 (note: server will be already running)
+	./WTF configure <hostname> 2020
+	./WTF add test testFile.txt	(testFile.txt in test dir)
+	Output:	SHOULD BE A PRINT STATEMENT OF SUCCESS
+
+7)	./WTFserver 2020 (note: server will be already running)
+	./WTF configure <hostname> 2020
+	./WTF destroy test
+	Output: //CLIENT CONNECTION SUCCESSFUL
+			"Server: New client accepted."
+			"Project test has been destroyed."
+
+
+
+
+
 
