@@ -59,7 +59,7 @@ void freeList(node* head)
     {
         temp = head;
         head = head->next;
-        if(temp->data != NULL)
+        if(temp->data != NULL && strlen(temp->data)!=0)
             free(temp->data);
         free(temp);
     }
@@ -446,7 +446,8 @@ node* readSocketL(int socket,int size)
         printf("Error: socket is empty\n");
         exit(1);
     }
-    free(c);
+    if(c)
+        free(c);
     return list;
 }
 
@@ -1674,6 +1675,32 @@ void client_commit(char* project,int sock)
     return;
 }
 
+void client_history(char* file, int sock)
+{
+    //max file name length is 255, need 4 for create flag, need 4 max for number of bytes
+    char* buf = myMalloc(300);
+    char* ans = myMalloc(1);
+    //construct a message in the format HIS~#bytes~filename
+    sprintf(buf,"HIS~%d~%s",strlen(file),file);
+    write(sock,buf,strlen(buf));
+    free(buf);
+    read(sock,ans,1);
+    if(atoi(ans)==1)
+    {
+        node* list = readSocket(sock);
+        node* ptr = list->next;
+        //skip the filename that is sent over
+        ptr = ptr->next;
+        while(ptr!=NULL)
+        {
+            printf("%s",ptr->data);
+            ptr = ptr->next;
+        }
+        freeList(list);
+    }
+    free(ans);
+}
+
 void client_push(char* project,int sock)
 {
     DIR* dir = opendir(project);
@@ -1813,6 +1840,7 @@ void client_push(char* project,int sock)
         printf("Error: The project %s does not exist locally, cannot commit.\n",project);
     return;
 }
+
 int main(int argc, char** argv)
 {
     if(argc == 4)
@@ -1874,6 +1902,12 @@ int main(int argc, char** argv)
         {
             int net_sock = initSocket();
             client_push(argv[2],net_sock);
+            close(net_sock);
+        }
+        else if(strcmp(argv[1],"history")==0)
+        {
+            int net_sock = initSocket();
+            client_history(argv[2],net_sock);
             close(net_sock);
         }
     }

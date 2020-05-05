@@ -73,7 +73,7 @@ void freeList(node* head)
     {
         temp = head;
         head = head->next;
-        if(temp->data != NULL)
+        if(temp->data != NULL && strlen(temp->data)!=0)
             free(temp->data);
         free(temp);
     }
@@ -1182,6 +1182,9 @@ void serv_push(int client_sock)
                 }
                 cptr = cptr->next;
             }
+            //separate by newline
+            write(wfd,"\n",1);
+            close(wfd);
             //increase manifest version#
             man->version+=1;
             //replace manifest
@@ -1196,6 +1199,33 @@ void serv_push(int client_sock)
     else
         write(client_sock,"0",1);
     free(fileName);
+    return;
+}
+
+void serv_history(int client_sock)
+{
+    char* fileName = clientMessage(client_sock);
+    //check if project exists
+    if(fileLookup(fileName))
+    {
+        //find history path
+        char* hist = myMalloc(strlen(fileName)+10);
+        sprintf(hist,"%s/.history",fileName);
+        int fd = open(hist,O_RDONLY);
+        //attempt to open history
+        if(fd<0)
+        {
+            write(client_sock,"2",1);
+            printf("Error: Could not find .history for %s\n",fileName);
+            return;
+        }
+        //tell client it exists and will be sent
+        write(client_sock,"1",1);
+        //send .history
+        writeFile(hist,client_sock);
+    }
+    else
+        write(client_sock,"0",1);
     return;
 }
 
@@ -1226,6 +1256,8 @@ void handle_connection(int client_sock)
         serv_commit(client_sock);
     else if(strcmp(flag,"PSH")==0)
         serv_push(client_sock);
+    else if(strcmp(flag,"HIS")==0)
+        serv_history(client_sock);
     free(c);
     free(flag);
     close(client_sock);
