@@ -275,6 +275,7 @@ void config(char* ip,char* port)
     char* buf = myMalloc(strlen(ip)+strlen(port)+1);
     sprintf(buf,"%s\t%s",ip,port);
     write(wfd,buf,strlen(buf));
+    printf("Client: .Configure file created with IP address/hostname and port number.\n");
     free(buf);
 }
 
@@ -500,6 +501,7 @@ int initSocket()
         free(error);
         exit(1);
     }
+    printf("Client: successfully connected to server.\n");
     return sock;
 }
 
@@ -511,12 +513,12 @@ void client_creat(char* file,int sock)
     //construct a message in the format CRT~#bytes~filename
     sprintf(buf,"CRT~%d~%s",strlen(file),file);
     write(sock,buf,strlen(buf));
-    printf("Finished writing to socket\n");
+    //printf("Finished writing to socket\n");
     read(sock,ans,1);
     int a = atoi(ans);
     if(a == 0)
     {
-        printf("Project %s was created.\n",file);
+        printf("Client: Project %s was created.\n",file);
         mkdir(file,00777);
         sprintf(buf,"%s/.Manifest",file);
         int fd = open(buf, O_WRONLY|O_APPEND|O_CREAT,00777);
@@ -544,7 +546,7 @@ void client_des(char* file,int sock)
     if(atoi(ans) == 0)
         printf("Error: Project %s does not exist.\n",file);
     else
-        printf("Project %s has been destroyed.\n",file);
+        printf("Client: Project %s has been destroyed.\n",file);
     free(buf);
     free(ans);
     return;
@@ -613,6 +615,7 @@ void add(char* project,char* file)
             free(dir);
             freeList(list);
             free(buf);
+	    printf("Client: file added successfully.\n");
             return;
         }
         dp = readdir(dir);
@@ -714,6 +717,7 @@ void rem(char* project,char* file)
     free(path);
     free(manPath);
     free(dir);
+    printf("Client: file removed successfully.\n");
     return;
 }
 
@@ -755,6 +759,7 @@ void client_ver(char* project, int sock)
             ptr=ptr->next;
         }
         freeList(list);
+	printf("Client: version command successful.\n");
     }
     else if(atoi(ans)==2)
         printf("Error: There was no .Manifest in %s\n",project);
@@ -897,6 +902,7 @@ void client_check(char* project,int sock)
             }
             close(fd);
             close(wfd);
+	    printf("Client: checkout command successful.\n");
             if(list!=NULL)
                 freeList(list);
         }
@@ -1137,6 +1143,7 @@ void client_update(char* project,int sock)
                 sprintf(up,"%s/.Update",project);
                 remove(up);
             }
+	    printf("Client: update command successful.\n");
         }
         else if(atoi(ans)==2)
             printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
@@ -1360,6 +1367,7 @@ void client_upgrade(char* project,int sock)
             remove(up);
             createManifestFile(man,manPath);
             free(man);
+            printf("Client: upgrade command successful.\n");
         }
         else if(atoi(ans)==2)
             printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
@@ -1660,6 +1668,7 @@ void client_commit(char* project,int sock)
                 free(c);
                 close(fd);
                 // free(comm);
+		printf("Client: commit command successful.\n");
             }
         }
         else if(atoi(ans)==2)
@@ -1696,6 +1705,7 @@ void client_history(char* file, int sock)
             printf("%s",ptr->data);
             ptr = ptr->next;
         }
+	printf("Client: history command successful.\n");
         freeList(list);
     }
     else if(atoi(ans)==2)
@@ -1725,7 +1735,7 @@ void client_rollback(char* file,char* version, int sock)
         //check status on version #
         read(sock,ans,1);
         if(atoi(ans)==1)
-            printf("Project %s has been rollbacked to version %s\n",file,version);
+            printf("Client: Project %s has been rollbacked to version %s\n",file,version);
         else
             printf("Error: Invalid version number to rollback\n");
     }
@@ -1853,6 +1863,7 @@ void client_push(char* project,int sock)
                 createManifestFile(man,manPath);
                 free(manPath);
                 freeManifest(man);
+		printf("Client: push command successful.\n");
             }
             else if(atoi(ans)==2)
                 printf("Error: Could not find a .Manifest for project %s. Aborting\n",project);
@@ -1889,6 +1900,7 @@ int main(int argc, char** argv)
         {
             int net_sock = initSocket();
             client_rollback(argv[2],argv[3], net_sock);
+	    printf("Client: disconnected from server.\n");
             close(net_sock);
         }
     }
@@ -1900,55 +1912,64 @@ int main(int argc, char** argv)
         {
             int net_sock = initSocket();
             client_creat(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");            
+	    close(net_sock);
         }
         else if(strcmp(argv[1],"destroy")==0)
         {
             int net_sock = initSocket();
             client_des(argv[2],net_sock);
+	    printf("Client: disconnected from server.\n");            
             close(net_sock);
         }
         else if(strcmp(argv[1],"currentversion")==0)
         {
             int net_sock = initSocket();
             client_ver(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");            
+	    close(net_sock);
         }
         else if(strcmp(argv[1],"checkout")==0)
         {
             int net_sock = initSocket();
             client_check(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");            
+	    close(net_sock);
         }
         else if(strcmp(argv[1],"update")==0)
         {
             int net_sock = initSocket();
             client_update(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");            
+	    close(net_sock);
         }
         else if(strcmp(argv[1],"upgrade")==0)
         {
             int net_sock = initSocket();
             client_upgrade(argv[2],net_sock);
+	    printf("Client: disconnected from server.\n");		
             close(net_sock);
         }
         else if(strcmp(argv[1],"commit")==0)
         {
             int net_sock = initSocket();
             client_commit(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");        
+	    close(net_sock);
         }
         else if(strcmp(argv[1],"push")==0)
         {
             int net_sock = initSocket();
             client_push(argv[2],net_sock);
+	    printf("Client: disconnected from server.\n");	 
             close(net_sock);
         }
         else if(strcmp(argv[1],"history")==0)
         {
             int net_sock = initSocket();
             client_history(argv[2],net_sock);
-            close(net_sock);
+	    printf("Client: disconnected from server.\n");           
+	    close(net_sock);
         }
     }
     else
