@@ -1229,6 +1229,53 @@ void serv_history(int client_sock)
     return;
 }
 
+void serv_rollback(int client_sock)
+{
+    char* fileName = clientMessage(client_sock);
+    if(fileLookup(fileName))
+    {
+        //let client know project exists and to send version #
+        write(client_sock,"1",1);
+        char* version = myMalloc(16);
+        char* ans = myMalloc(1);
+        int c = 0;
+        while(read(client_sock,ans,1)>0)
+        {
+            if(*ans == '~')
+                break;
+            memcpy(version+c,ans,1);
+            c++;
+        }
+        //path is project/.data/project<version>
+        char* looking = myMalloc(11+strlen(version)+(2*strlen(fileName)));
+        sprintf(looking,"%s/.data/%s%s",fileName,fileName,version);
+        DIR* dir = opendir(looking);
+        if(dir!=NULL)
+        {
+            //cpy to cwd
+            char* cpy = myMalloc(strlen(looking)+20);
+            sprintf(cpy,"cp -r %s/.data/%s%s .",fileName,fileName,version);
+            system(cpy);
+            //delete the directory recursively
+            if(recurse_del(fileName))
+                remove(fileName);
+            //rename the older version
+            char* rename = myMalloc(strlen(looking)+20);
+            sprintf(rename,"mv %s%s %s",fileName,version,fileName);
+            system(rename);
+            free(cpy);
+            free(rename);
+            write(client_sock,"1",1);
+        }
+        //version # not there
+        else
+            write(client_sock,"0",1);
+    }
+    else 
+        write(client_sock,"0",1);
+    return;
+}
+
 void handle_connection(int client_sock)
 {
     char* flag = myMalloc(3);
@@ -1258,6 +1305,8 @@ void handle_connection(int client_sock)
         serv_push(client_sock);
     else if(strcmp(flag,"HIS")==0)
         serv_history(client_sock);
+    else if(strcmp(flag,"ROL")==0)
+        serv_rollback(client_sock);
     free(c);
     free(flag);
     close(client_sock);

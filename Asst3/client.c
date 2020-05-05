@@ -1698,7 +1698,41 @@ void client_history(char* file, int sock)
         }
         freeList(list);
     }
+    else if(atoi(ans)==2)
+        printf("Error: Could not find .history on server\n");
+    else
+        printf("Error: Project %s does not exist on server\n",file);
     free(ans);
+}
+
+void client_rollback(char* file,char* version, int sock)
+{
+    //max file name length is 255, need 4 for create flag, need 4 max for number of bytes
+    char* buf = myMalloc(300);
+    char* ans = myMalloc(1);
+    //construct a message in the format ROL~#bytes~filename
+    sprintf(buf,"ROL~%d~%s",strlen(file),file);
+    write(sock,buf,strlen(buf));
+    free(buf);
+    //check if the project is there
+    read(sock,ans,1);
+    if(atoi(ans)==1)
+    {
+        //send version number
+        char* ver = myMalloc(strlen(version)+1);
+        sprintf(ver,"%s~",version);
+        write(sock,ver,strlen(ver));
+        //check status on version #
+        read(sock,ans,1);
+        if(atoi(ans)==1)
+            printf("Project %s has been rollbacked to version %s\n",file,version);
+        else
+            printf("Error: Invalid version number to rollback\n");
+    }
+    else
+        printf("Error: Project %s does not exist on server\n",file);
+    free(ans);
+    return;
 }
 
 void client_push(char* project,int sock)
@@ -1846,11 +1880,17 @@ int main(int argc, char** argv)
     if(argc == 4)
     {
         if(strcmp(argv[1],"configure")==0)
-            config(argv[2],argv[ 3]);
+            config(argv[2],argv[3]);
         else if(strcmp(argv[1],"add")==0)
             add(argv[2],argv[3]);
         else if(strcmp(argv[1],"remove")==0)
             rem(argv[2],argv[3]);
+        else if(strcmp(argv[1],"rollback")==0)
+        {
+            int net_sock = initSocket();
+            client_rollback(argv[2],argv[3], net_sock);
+            close(net_sock);
+        }
     }
     else if(argc == 3)
     {
