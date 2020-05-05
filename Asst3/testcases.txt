@@ -1,0 +1,11 @@
+ds1576
+ml1417
+------------------------------------------------------------
+Test Cases:
+
+1)	./WTFserver
+	Error: expected 2 arguments, received 1
+
+2)	./WTFserver 1
+	Error: 1 is not a valid port
+
