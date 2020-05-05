@@ -1310,6 +1310,7 @@ void handle_connection(int client_sock)
     free(c);
     free(flag);
     close(client_sock);
+    printf("Server: Client has disconnected.\n");
 }
 void exiting()
 {
@@ -1358,8 +1359,12 @@ int main(int argc, char** argv)
     int client_sock;
 	signal(SIGINT, sigHandler);
 	atexit(exiting);
-	client_sock = accept(serv_sock,NULL,NULL);
-    handle_connection(client_sock);
+	if(client_sock = accept(serv_sock,NULL,NULL) > 0)
+	{
+	    printf("Server: new client accepted.\n");
+	    handle_connection(client_sock);	    
+	}
+   // handle_connection(client_sock);
     close(serv_sock);
     return 0;
 }
