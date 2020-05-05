@@ -4,3 +4,5 @@ all:
 clean:
 	rm -rf WTF
 	# rm -rf WTFserver
+test:
+	gcc -g testplan.c -o WTFtest
