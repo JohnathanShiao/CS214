@@ -19,35 +19,34 @@ int main(int argc, char** argv)
 	system(command);
 	strcpy(command, "./WTF configure $HOSTNAME 2020");
 	system(command);
-	strcpy(command, "./WTF create test");
+	strcpy(command, "./WTF create testProject");
 	system(command);
 
 	printf("--------------------\nTest Case 4:\n");
-	strcpy(command, "./WTF configure $HOSTNAME 2021");
-	system(command);
+	//strcpy(command, "./WTF configure $HOSTNAME 2021");
+	//system(command);
 	strcpy(command, "./WTF create test2");
 	system(command);
 
 	printf("---------------------\nTest Case 5:\n");
-	strcpy(command, "./WTF configure $HOSTNAME 2020");
+	strcpy(command, "cd testProject && touch file.txt");
 	system(command);
-	strcpy(command, "./WTF create test");
+	//strcpy(command, "./WTF configure $HOSTNAME 2020");
+	//system(command);
+	strcpy(command, "./WTF add testProject file.txt");
 	system(command);
 
 	printf("---------------------\nTest Case 6:\n");
-	strcpy(command, "cd test && touch testFile.txt");
-	system(command);
-	strcpy(command, "./WTF configure $HOSTNAME 2020");
-	system(command);
-	strcpy(command, "./WTF add test testFile.txt");
+	//strcpy(command, "./WTF configure $HOSTNAME 2020");
+	//system(command);
+	strcpy(command, "./WTF remove testProject file.txt");
 	system(command);
 
 	printf("---------------------\nTest Case 7:\n");
-	strcpy(command, "./WTF configure $HOSTNAME 2020");
+	//strcpy(command, "./WTF configure $HOSTNAME 2020");
+	//system(command);
+	strcpy(command, "./WTF destroy testProject");
 	system(command);
-	strcpy(command, "./WTF destroy test");
-	system(command);
-
 
 	return 0;
 }

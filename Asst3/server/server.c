@@ -13,6 +13,17 @@
 #include <pthread.h>
 #include <signal.h>
 
+typedef struct mutex
+{
+	char* name;
+	pthread_mutex_t* lock;
+	struct mutex* next;	
+}mutex;
+
+//globals
+mutex* head = NULL;
+int serv_sock;
+
 typedef struct node
 {
     char* data;
@@ -46,6 +57,80 @@ void* myMalloc(int size)
         exit(1);
     }
     return temp;
+}
+
+mutex* initMutex(char* projectName) //initializes mutex struct
+{
+	mutex* temp = myMalloc(sizeof(mutex));
+	char* tempName = myMalloc(strlen(projectName));
+	memcpy(tempName, projectName, strlen(projectName));
+	pthread_mutex_t tempLock;
+	if(pthread_mutex_init(&tempLock, NULL) != 0)
+	{
+		printf("mutex init has failed.\n");
+		return NULL;
+	}
+	temp->lock = &tempLock;
+	temp->name = tempName;
+	temp->next = NULL;	
+	return temp;
+}
+
+void freeMutexes()	//frees list of mutexes (at exit)
+{
+	while(head != NULL)
+	{
+		mutex* ptr = head;
+		head = head->next;
+		pthread_mutex_destroy(ptr->lock);
+		free(ptr->name);
+		free(ptr);
+	}
+}
+
+void mutex_creat(char* projectName) //creates and adds mutex to LL when project is created
+{
+	mutex* temp = initMutex(projectName);
+	temp->next = head;
+	head = temp;
+}
+
+void mutex_del(char* projectName)	//deletes mutex when project is destroyed
+{
+	if(head == NULL){
+		return;
+	}
+	mutex* curr = head;
+	mutex* prev;
+	if(strcmp(head->name, projectName) ==  0){ //delete head
+		head = curr->next;
+		pthread_mutex_destroy(curr->lock);
+		free(head->name);
+		free(curr);
+		return;
+	}
+	while(curr != NULL && strcmp(curr->name, projectName) != 0){
+		prev = curr;
+		curr = curr->next;
+	}
+	if(curr == NULL){
+		return;
+	}	
+	prev->next = curr->next;
+	pthread_mutex_destroy(curr->lock);
+	free(curr->name);
+	free(curr);
+}
+
+mutex* getMutex(char* projectName)	//returns mutex for thread to lock
+{
+	mutex* ptr = head;
+	while(ptr != NULL)
+	{
+		if(strcmp(projectName, ptr->name) == 0)
+			return ptr;
+	}
+	return NULL;
 }
 
 node* initNode()
@@ -467,6 +552,7 @@ void serv_creat(int client_sock)
         free(path);
         close(fd);
     }
+	mutex_creat(fileName);
     free(fileName);
 }
 
@@ -509,6 +595,10 @@ int recurse_del(char* file)
 void serv_del(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
+
     if(fileLookup(fileName))
     {
         if(recurse_del(fileName))
@@ -517,6 +607,8 @@ void serv_del(int client_sock)
     }
     else
         write(client_sock,"0",1);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     free(fileName);
 }
 
@@ -932,6 +1024,9 @@ void expire(char* project)
 void serv_push(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(fileLookup(fileName))
     {
         //tell client project exists
@@ -1199,6 +1294,8 @@ void serv_push(int client_sock)
     else
         write(client_sock,"0",1);
     free(fileName);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     return;
 }
 
@@ -1276,8 +1373,9 @@ void serv_rollback(int client_sock)
     return;
 }
 
-void handle_connection(int client_sock)
+void* handle_connection(void* cs)
 {
+	int client_sock = *((int*)cs);
     char* flag = myMalloc(3);
     int i = 0;
     char* c = myMalloc(1);
@@ -1314,13 +1412,15 @@ void handle_connection(int client_sock)
 }
 void exiting()
 {
-	printf("terminated\n");
-	//add closes threads and stuff
+	close(serv_sock);
+	freeMutexes();	
+	printf("Server: terminated\n");
+	
 }
 
 void sigHandler(int signum)
 {
-	exit(1);
+	exit(3);
 }
 
 int main(int argc, char** argv)
@@ -1359,12 +1459,18 @@ int main(int argc, char** argv)
     int client_sock;
 	signal(SIGINT, sigHandler);
 	atexit(exiting);
-	if(client_sock = accept(serv_sock,NULL,NULL) > 0)
+	while(1)
 	{
-	    printf("Server: new client accepted.\n");
-	    handle_connection(client_sock);	    
+	    client_sock = accept(serv_sock,NULL,NULL);
+		if(client_sock > 0)
+		{
+			printf("Server: New client accepted\n");
+			pthread_t tid;
+   			pthread_create(&tid, NULL, handle_connection, &client_sock);
+		}else
+			printf("Server: Error: Client could not be accepted.\n");
 	}
    // handle_connection(client_sock);
-    close(serv_sock);
+    //close(serv_sock);
     return 0;
 }

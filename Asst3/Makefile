@@ -1,8 +1,9 @@
 all:
-	gcc -g client.c -lcrypto -o WTF
-	# gcc -g server.c -lcrypto -lpthread -o WTFserver
+	gcc client.c -lcrypto -o WTF
+	cd server && gcc server.c -lcrypto -lpthread -o WTFserver
 clean:
 	rm -rf WTF
-	# rm -rf WTFserver
+	cd server && rm -rf WTFserver
+	rm WTFtest
 test:
-	gcc -g testplan.c -o WTFtest
+	gcc testplan.c -o WTFtest
