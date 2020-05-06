@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <signal.h>
 
+
 typedef struct mutex
 {
 	char* name;
@@ -35,7 +36,6 @@ typedef struct file
 	int version;
 	char* filename;
 	char* digest;
-	//char* path;
 	struct file* next;
 }file;
 
@@ -95,7 +95,7 @@ void mutex_creat(char* projectName) //creates and adds mutex to LL when project 
 	head = temp;
 }
 
-void mutex_del(char* projectName)	//deletes mutex when project is destroyed
+void mutex_del(char* projectName)	//deletes mutex
 {
 	if(head == NULL){
 		return;
@@ -161,15 +161,6 @@ void freeList(node* head)
         if(temp->data != NULL && strlen(temp->data)!=0)
             free(temp->data);
         free(temp);
-    }
-}
-
-void check(int num, char* msg)
-{
-    if(num < 0)
-    {
-        printf("%s\n",msg);
-        exit(1);
     }
 }
 
@@ -327,7 +318,10 @@ manifest* insertToManifest(manifest* m, file* f)
 node* readFile(char* file)
 {
     int fd = open(file,O_RDONLY);
-    check(fd,"Error: Could not open file.");
+	if(fd <0)
+	{
+		printf("Error: Could not open file.");
+	}
     char* c = myMalloc(sizeof(char));
     node* head = NULL;                  //linked list of chars to create a token
     node* temp;
@@ -417,7 +411,7 @@ char* clientMessage(int client_sock)
     if(siz <= 0)
     {   
         printf("Something went wrong with delete.\n");
-        exit(1);
+        return strdup("");
     }
     char* fileName = myMalloc(siz);
     i=0;
@@ -602,7 +596,6 @@ void serv_del(int client_sock)
 	mutex* project = getMutex(fileName);
 	if(project != NULL)
 		pthread_mutex_lock(project->lock);
-
     if(fileLookup(fileName))
     {
         if(recurse_del(fileName))
@@ -611,14 +604,17 @@ void serv_del(int client_sock)
     }
     else
         write(client_sock,"0",1);
+    free(fileName);
 	if(project != NULL)
 		pthread_mutex_unlock(project->lock);
-    free(fileName);
 }
 
 manifest* serv_ver(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(fileLookup(fileName))
     {
         char* buf = myMalloc(11+strlen(fileName));
@@ -631,6 +627,8 @@ manifest* serv_ver(int client_sock)
             free(fileName);
             free(buf);
             close(fd);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return NULL;
         }
         manifest* man = loadManifest(buf);
@@ -639,6 +637,8 @@ manifest* serv_ver(int client_sock)
         {
             printf("Error: .Manifest is empty\n");
             write(client_sock,"3",1);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return NULL;
         }
         write(client_sock,"1",1);
@@ -660,11 +660,15 @@ manifest* serv_ver(int client_sock)
                 temp = temp->next;
             }
         }
+		if(project != NULL)
+			pthread_mutex_unlock(project->lock);
         return man;
     }
     else
         write(client_sock,"0",1);
     free(fileName);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     return NULL;
 }
 
@@ -681,11 +685,16 @@ void writeFile(char* file, int client_sock)
 void serv_check(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(!fileLookup(fileName))
     {
         printf("Error: Project %s does not exist.\n",fileName);
         write(client_sock,"0",1);
         free(fileName);
+		if(project != NULL)
+			pthread_mutex_unlock(project->lock);
         return;
     }
     char* manPath = myMalloc(strlen(fileName)+11);
@@ -696,6 +705,8 @@ void serv_check(int client_sock)
         write(client_sock,"2",1);
         free(fileName);
         free(manPath);
+		if(project != NULL)
+			pthread_mutex_unlock(project->lock);
         return;
     }
     write(client_sock,"1",1);
@@ -735,16 +746,23 @@ void serv_check(int client_sock)
         }
     }
     free(man);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
 }
 
 void serv_upgrade(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(!fileLookup(fileName))
     {
         printf("Error: Project %s does not exist.\n",fileName);
         write(client_sock,"0",1);
         free(fileName);
+		if(project != NULL)
+			pthread_mutex_unlock(project->lock);
         return;
     }
     char* manPath = myMalloc(strlen(fileName)+11);
@@ -755,6 +773,8 @@ void serv_upgrade(int client_sock)
         write(client_sock,"2",1);
         free(fileName);
         free(manPath);
+		if(project != NULL)
+			pthread_mutex_unlock(project->lock);
         return;
     }
     //manifest exists
@@ -782,6 +802,8 @@ void serv_upgrade(int client_sock)
         }
     }
     free(man);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
 }
 
 node* readSocket(int socket)
@@ -833,7 +855,7 @@ node* readSocket(int socket)
     if(list == NULL)
     {
         printf("Error: socket is empty\n");
-        exit(1);
+        return NULL;
     }
     free(c);
     return list;
@@ -892,7 +914,7 @@ node* readSocketL(int socket,int size)
     if(list == NULL)
     {
         printf("Error: socket is empty\n");
-        exit(1);
+        return NULL;
     }
     free(c);
     return list;
@@ -901,6 +923,9 @@ node* readSocketL(int socket,int size)
 void serv_commit(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(fileLookup(fileName))
     {
         char* buf = myMalloc(11+strlen(fileName));
@@ -913,6 +938,8 @@ void serv_commit(int client_sock)
             free(fileName);
             free(buf);
             close(fd);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         manifest* man = loadManifest(buf);
@@ -921,6 +948,8 @@ void serv_commit(int client_sock)
         {
             printf("Error: .Manifest is empty\n");
             write(client_sock,"3",1);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         write(client_sock,"1",1);
@@ -970,6 +999,8 @@ void serv_commit(int client_sock)
             if(list==NULL)
             {
                 printf("Did not receive commit from client\n");
+				if(project != NULL)
+					pthread_mutex_unlock(project->lock);
                 return;
             }
             node* ptr = list->next;
@@ -977,7 +1008,11 @@ void serv_commit(int client_sock)
             sprintf(comfile,"%s/commit/%s",fileName,list->data);
             fd = open(comfile,O_WRONLY|O_APPEND);
             if(fd>0)
+			{
+				if(project != NULL)
+					pthread_mutex_unlock(project->lock);
                 return;
+			}
             fd = open(comfile,O_WRONLY|O_APPEND|O_CREAT,00777);
             ptr = ptr->next;
             while(ptr!=NULL)
@@ -993,6 +1028,8 @@ void serv_commit(int client_sock)
     else
         write(client_sock,"0",1);
     free(fileName);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     return;
 }
 
@@ -1052,6 +1089,8 @@ void serv_push(int client_sock)
         {
             printf("Error: Did not receive .Commit");
             free(fileName);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         //check for already existing commit
@@ -1065,6 +1104,8 @@ void serv_push(int client_sock)
             free(com);
             free(fileName);
             freeList(files);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         //load up commit here to avoid copying to old 
@@ -1075,6 +1116,8 @@ void serv_push(int client_sock)
             free(com);
             free(fileName);
             free(files);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         //expire all other commits
@@ -1090,6 +1133,8 @@ void serv_push(int client_sock)
             free(com);
             freeList(files);
             free(commit);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         manifest* man = loadManifest(manPath);
@@ -1099,6 +1144,8 @@ void serv_push(int client_sock)
             free(manPath);
             free(com);
             freeList(files);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         int failure = 0;
@@ -1113,6 +1160,8 @@ void serv_push(int client_sock)
             free(dupe);
             free(com);
             close(fd);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         char* cpy = myMalloc((2*strlen(fileName))+20);
@@ -1306,6 +1355,9 @@ void serv_push(int client_sock)
 void serv_history(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     //check if project exists
     if(fileLookup(fileName))
     {
@@ -1318,6 +1370,8 @@ void serv_history(int client_sock)
         {
             write(client_sock,"2",1);
             printf("Error: Could not find .history for %s\n",fileName);
+			if(project != NULL)
+				pthread_mutex_unlock(project->lock);
             return;
         }
         //tell client it exists and will be sent
@@ -1327,12 +1381,17 @@ void serv_history(int client_sock)
     }
     else
         write(client_sock,"0",1);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     return;
 }
 
 void serv_rollback(int client_sock)
 {
     char* fileName = clientMessage(client_sock);
+	mutex* project = getMutex(fileName);
+	if(project != NULL)
+		pthread_mutex_lock(project->lock);
     if(fileLookup(fileName))
     {
         //let client know project exists and to send version #
@@ -1374,6 +1433,8 @@ void serv_rollback(int client_sock)
     }
     else 
         write(client_sock,"0",1);
+	if(project != NULL)
+		pthread_mutex_unlock(project->lock);
     return;
 }
 
@@ -1418,7 +1479,7 @@ void exiting()
 {
 	close(serv_sock);
 	freeMutexes();	
-	printf("Server: terminated\n");
+	printf("\nServer: terminated\n");
 	
 }
 
@@ -1474,7 +1535,5 @@ int main(int argc, char** argv)
 		}else
 			printf("Server: Error: Client could not be accepted.\n");
 	}
-   // handle_connection(client_sock);
-    //close(serv_sock);
     return 0;
 }
