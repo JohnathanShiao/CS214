@@ -1424,7 +1424,7 @@ int clientDifference(char* project, manifest* client, manifest* server)
         while(ctemp!=NULL && stemp == NULL)
         {
             char* line = myMalloc(strlen(ctemp->filename)+strlen(ctemp->digest)+10);
-            sprintf(line,"A\t%d\t%s\t%s\n",ctemp->version+1,ctemp->filename,ctemp->digest);
+            sprintf(line,"A\t%d\t%s\t%s\n",ctemp->version,ctemp->filename,ctemp->digest);
             write(wfd,line,strlen(line));
             printf("A %s\n",ctemp->filename);
             free(line);
@@ -1485,7 +1485,7 @@ int clientDifference(char* project, manifest* client, manifest* server)
                 else //write a delete
                 {
                     char* line = myMalloc(strlen(cptr->filename)+strlen(cptr->digest)+20);
-                    sprintf(line,"A\t%d\t%s\t%s\n",cptr->version+1,cptr->filename,cptr->digest);
+                    sprintf(line,"A\t%d\t%s\t%s\n",cptr->version,cptr->filename,cptr->digest);
                     write(wfd,line,strlen(line));
                     printf("A %s\n",cptr->filename);
                     free(line);
