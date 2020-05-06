@@ -541,10 +541,14 @@ void serv_creat(int client_sock)
             return;
         }
         write(fd,"0\n",2);
-        char* comm = myMalloc(strlen(fileName)+7);
+        char* comm = myMalloc(strlen(fileName)+8);
         sprintf(comm,"%s/commit",fileName);
         mkdir(comm,00777);
         free(comm);
+        char* data = myMalloc(strlen(fileName)+7);
+        sprintf(data,"%s/.data",fileName);
+        mkdir(data,00777);
+        free(data);
         char* hist = myMalloc(strlen(fileName)+5);
         sprintf(hist,"%s/.data",fileName);
         fd = open(hist,O_WRONLY|O_CREAT,00777);
