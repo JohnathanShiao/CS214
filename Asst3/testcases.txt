@@ -57,7 +57,3 @@ Test Cases:
 		"Client: Project testProject has been destroyed."
 		"Client: disconnected from server."
 		"Server: Client has disconnected."
-		
-8)	./WTFserver2020 (note: server will be already running)
-	./WTF configure <hostname> 2020
-	./WTF
